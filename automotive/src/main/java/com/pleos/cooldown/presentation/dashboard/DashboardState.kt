@@ -1,7 +1,5 @@
 package com.pleos.cooldown.presentation.dashboard
 
-import com.pleos.cooldown.domain.model.DrivingEvent
-import com.pleos.cooldown.domain.model.DrivingScore
 import com.pleos.cooldown.domain.model.GearPosition
 import com.pleos.cooldown.domain.model.VehicleState
 
@@ -10,9 +8,7 @@ import com.pleos.cooldown.domain.model.VehicleState
  */
 data class DashboardState(
     val isMonitoring: Boolean = false,
-    val drivingScore: DrivingScore = DrivingScore(),
     val vehicleState: VehicleState = VehicleState(),
-    val recentEvents: List<DrivingEvent> = emptyList(),
     val currentSpeedLimit: Int? = null,
     val isAccidentZone: Boolean = false,
     val autoStartEnabled: Boolean = false

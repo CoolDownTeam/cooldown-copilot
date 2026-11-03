@@ -13,7 +13,6 @@ data class TripData(
     val finalScore: Int,
     val grade: ScoreGrade,
     val totalDistance: Float = 0f,  // km
-    val events: List<DrivingEvent> = emptyList(),
     val violations: Int = 0,
     val positiveActions: Int = 0
 ) {

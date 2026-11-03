@@ -2,8 +2,6 @@ package com.pleos.cooldown.presentation.result
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.*
@@ -16,7 +14,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pleos.cooldown.presentation.components.AutomotiveButton
 import com.pleos.cooldown.presentation.components.ScoreDisplay
-import com.pleos.cooldown.presentation.components.ViolationCard
 import com.pleos.cooldown.presentation.theme.*
 
 @Composable
@@ -90,14 +87,12 @@ fun ResultScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(state.events) { event ->
-                    ViolationCard(event = event)
-                }
-            }
+            // F4 주행 리포트(11/9)에서 개입 기록으로 바뀐다
+            Text(
+                text = "기록된 이벤트가 없어요",
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextDisabled
+            )
         }
     }
 }
