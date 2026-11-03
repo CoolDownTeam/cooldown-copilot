@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Compose handles theming, this is just for Activity splash -->
-    <style name="Theme.DrivingGame" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.Cooldown" parent="android:Theme.Material.NoActionBar">
         <item name="android:colorBackground">#121212</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>

@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.pleos.drivinggame"
+    namespace = "com.pleos.cooldown"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.pleos.drivinggame"
+        applicationId = "com.pleos.cooldown"
         minSdk = 28
         targetSdk = 36
         versionCode = 1

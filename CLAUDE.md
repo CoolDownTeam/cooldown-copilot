@@ -1,5 +1,5 @@
 # 프로젝트
-- Pleos Connect SDK(AAOS 기반) 차량용 앱 `com.pleos.drivinggame`. minSdk 28, Gradle 8+.
+- Pleos Connect SDK(AAOS 기반) 차량용 앱 `com.pleos.cooldown`. minSdk 28, Gradle 8+.
 - 모듈: `automotive`(메인 차량 앱, Compose), `mobile`, `shared`.
 - 패키지 구조: data / domain / presentation / service / di / util. 새 코드도 이 계층을 따른다.
 - 사용 중인 SDK: Vehicle, NaviHelper (버전은 gradle/libs.versions.toml). 의존성은 버전 카탈로그로만 추가한다.
