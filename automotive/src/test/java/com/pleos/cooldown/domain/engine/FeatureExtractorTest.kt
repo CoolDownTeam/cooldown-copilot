@@ -2,9 +2,8 @@ package com.pleos.cooldown.domain.engine
 
 import com.pleos.cooldown.domain.model.DrivingFeatures
 import com.pleos.cooldown.domain.model.FeatureId
-import com.pleos.cooldown.domain.model.Gear
 import com.pleos.cooldown.domain.model.SpeedBand
-import com.pleos.cooldown.domain.model.VehicleSignal
+import com.pleos.cooldown.testutil.DriveSequence
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -203,72 +202,18 @@ class FeatureExtractorTest {
     private fun DrivingFeatures.value(id: FeatureId): Double =
         values[id] ?: throw AssertionError("missing feature $id in $values")
 
-    /** 10Hz로 신호를 넣는 녹화 시퀀스 빌더 */
+    /** 녹화 시퀀스 + 추출기 */
     private class Drive(private val extractor: FeatureExtractor) {
-        var timeMs = 0L
-            private set
-        var speedKmh = 0.0
-            private set
-        private var steerDeg = 0.0
-        private var brake = false
+        private val sequence = DriveSequence(onSample = extractor::add)
+        val speedKmh: Double get() = sequence.speedKmh
 
-        fun cruise(sec: Double, kmh: Double) {
-            speedKmh = kmh
-            brake = false
-            repeat(steps(sec)) { step() }
-        }
-
-        fun accelerate(sec: Double, ms2: Double, brake: Boolean = false) {
-            this.brake = brake
-            repeat(steps(sec)) {
-                speedKmh = (speedKmh + ms2 * STEP_SEC * 3.6).coerceAtLeast(0.0)
-                step()
-            }
-            this.brake = false
-        }
-
-        fun spike(deltaKmh: Double) {
-            speedKmh += deltaKmh
-            step()
-            speedKmh -= deltaKmh
-        }
-
-        fun steerBy(deg: Double, sec: Double) {
-            val n = steps(sec)
-            val perStep = deg / n
-            repeat(n) {
-                steerDeg += perStep
-                step()
-            }
-        }
-
-        fun gap(ms: Long) {
-            timeMs += ms
-        }
+        fun cruise(sec: Double, kmh: Double) = sequence.cruise(sec, kmh)
+        fun accelerate(sec: Double, ms2: Double, brake: Boolean = false) = sequence.accelerate(sec, ms2, brake)
+        fun spike(deltaKmh: Double) = sequence.spike(deltaKmh)
+        fun steerBy(deg: Double, sec: Double) = sequence.steerBy(deg, sec)
+        fun gap(ms: Long) = sequence.gap(ms)
 
         fun snapshot(): DrivingFeatures =
-            extractor.snapshot(timeMs) ?: throw AssertionError("no snapshot")
-
-        private fun step() {
-            timeMs += STEP_MS
-            extractor.add(
-                timeMs,
-                VehicleSignal(
-                    timestampMs = timeMs,
-                    speedKmh = speedKmh.toFloat(),
-                    gear = Gear.D,
-                    brakePressed = brake,
-                    steeringAngleDeg = steerDeg.toFloat(),
-                    odometerKm = null
-                )
-            )
-        }
-
-        private fun steps(sec: Double) = Math.round(sec / STEP_SEC).toInt()
-
-        companion object {
-            const val STEP_MS = 100L
-            const val STEP_SEC = 0.1
-        }
+            extractor.snapshot(sequence.timeMs) ?: throw AssertionError("no snapshot")
     }
 }
