@@ -10,8 +10,26 @@
     <!-- AAOS: 차속 (런타임 권한) -->
     <uses-permission android:name="android.car.permission.CAR_SPEED" />
 
+    <!-- AAOS: 외기온 (F2 계절 판단) -->
+    <uses-permission android:name="android.car.permission.CAR_EXTERIOR_ENVIRONMENT" />
+
     <!-- Pleos Vehicle SDK: 기어·브레이크·조향·주행 거리 -->
     <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
+
+    <!-- Pleos Vehicle SDK: 공조·시트 통풍 조회와 제어 (F2). CONTROL_* 는 App Market 사전 승인 필요 -->
+    <uses-permission android:name="pleos.car.permission.CAR_CLIMATE" />
+    <uses-permission android:name="pleos.car.permission.CONTROL_CAR_CLIMATE" />
+    <uses-permission android:name="pleos.car.permission.CAR_SEATS" />
+    <uses-permission android:name="pleos.car.permission.CONTROL_CAR_SEATS" />
+
+    <!-- Pleos TextToSpeech·SpeechToText: F2 안내 한 문장과 "추워" 응답창 -->
+    <uses-permission android:name="pleos.car.permission.TTS_SERVICE" />
+    <uses-permission android:name="pleos.car.permission.STT_SERVICE" />
+
+    <!-- 주행 중 화면이 없어도 동작하는 포그라운드 서비스 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Pleos NaviHelper SDK Permissions -->
     <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
@@ -39,6 +57,24 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".service.CopilotService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="In-vehicle driving companion that adjusts cabin climate while driving" />
+        </service>
+
+        <!-- Gleo Interface: Gleo가 sendBroadcast로 보내는 Action 수신 (명세 4.8) -->
+        <receiver
+            android:name=".data.gleo.GleoActionReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="ADJUST_CABIN_COMFORT" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

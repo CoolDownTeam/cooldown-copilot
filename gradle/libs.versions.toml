@@ -14,6 +14,8 @@ media = "1.6.0"
 # Pleos SDK
 pleosVehicle = "2.0.3"
 pleosNaviHelper = "2.0.3"
+pleosTextToSpeech = "3.3.1"
+pleosSpeechToText = "3.3.1"
 
 # DI
 hilt = "2.56.1"
@@ -46,6 +48,8 @@ androidx-media = { group = "androidx.media", name = "media", version.ref = "medi
 # Pleos SDK
 pleos-vehicle = { module = "ai.pleos.playground:Vehicle", version.ref = "pleosVehicle" }
 pleos-navihelper = { module = "ai.pleos.playground:NaviHelper", version.ref = "pleosNaviHelper" }
+pleos-tts = { module = "ai.pleos.playground:TextToSpeech", version.ref = "pleosTextToSpeech" }
+pleos-stt = { module = "ai.pleos.playground:SpeechToText", version.ref = "pleosSpeechToText" }
 
 # Hilt
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
