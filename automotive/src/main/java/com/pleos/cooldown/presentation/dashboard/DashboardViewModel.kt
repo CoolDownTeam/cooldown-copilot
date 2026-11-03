@@ -3,9 +3,10 @@ package com.pleos.cooldown.presentation.dashboard
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.pleos.cooldown.data.pleos.PleosVehicleDataSource
+import com.pleos.cooldown.CooldownApplication
 import com.pleos.cooldown.domain.model.DrivingEvent
 import com.pleos.cooldown.domain.model.DrivingScore
+import com.pleos.cooldown.domain.model.Gear
 import com.pleos.cooldown.domain.model.GearPosition
 import com.pleos.cooldown.domain.model.TrafficViolation
 import kotlinx.coroutines.Job
@@ -19,7 +20,8 @@ import java.time.LocalDateTime
 
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val vehicleDataSource = PleosVehicleDataSource(application)
+    // 앱 전체에서 공유하는 데이터 소스. 수명은 앱이 관리한다 (이후 CopilotService로 이동)
+    private val vehicleDataSource = (application as CooldownApplication).container.vehicleDataSource
 
     private val _state = MutableStateFlow(DashboardState())
     val state: StateFlow<DashboardState> = _state.asStateFlow()
@@ -33,50 +35,36 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private var consecutiveSafeMinutes: Int = 0
 
     init {
-        // Vehicle SDK 초기화
-        vehicleDataSource.initialize()
-        // 차량 데이터 구독 시작
+        vehicleDataSource.start()
         observeVehicleData()
     }
 
     private fun observeVehicleData() {
-        // 속도 모니터링
         viewModelScope.launch {
-            vehicleDataSource.speedFlow.collect { speed ->
+            vehicleDataSource.signal.collect { signal ->
+                val gearPosition = when (signal.gear) {
+                    Gear.P -> GearPosition.P
+                    Gear.R -> GearPosition.R
+                    Gear.N -> GearPosition.N
+                    Gear.D -> GearPosition.D
+                    Gear.UNKNOWN -> GearPosition.UNKNOWN
+                }
+
                 _state.update { state ->
                     state.copy(
                         vehicleState = state.vehicleState.copy(
-                            speed = speed,
-                            timestamp = System.currentTimeMillis()
+                            speed = signal.speedKmh,
+                            gearPosition = gearPosition,
+                            steeringAngle = signal.steeringAngleDeg,
+                            isEngineOn = gearPosition != GearPosition.P,
+                            timestamp = signal.timestampMs
                         )
                     )
                 }
 
                 // 모니터링 중일 때만 위반 체크
                 if (_state.value.isMonitoring) {
-                    checkSpeedViolation(speed)
-                }
-            }
-        }
-
-        // 기어 모니터링
-        viewModelScope.launch {
-            vehicleDataSource.gearFlow.collect { gearValue ->
-                val gearPosition = when (gearValue) {
-                    PleosVehicleDataSource.GEAR_PARK -> GearPosition.P
-                    PleosVehicleDataSource.GEAR_REVERSE -> GearPosition.R
-                    PleosVehicleDataSource.GEAR_NEUTRAL -> GearPosition.N
-                    PleosVehicleDataSource.GEAR_DRIVE -> GearPosition.D
-                    else -> GearPosition.UNKNOWN
-                }
-
-                _state.update { state ->
-                    state.copy(
-                        vehicleState = state.vehicleState.copy(
-                            gearPosition = gearPosition,
-                            isEngineOn = gearPosition != GearPosition.P
-                        )
-                    )
+                    checkSpeedViolation(signal.speedKmh)
                 }
             }
         }
@@ -203,6 +191,5 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         speedMonitorJob?.cancel()
         gearMonitorJob?.cancel()
         safetyBonusJob?.cancel()
-        vehicleDataSource.release()
     }
 }
