@@ -20,7 +20,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "My Application"
+rootProject.name = "CooldownCopilot"
 include(":mobile")
 include(":automotive")
 include(":shared")
