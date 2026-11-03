@@ -2,8 +2,6 @@ package com.pleos.cooldown.presentation.dashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
@@ -21,11 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.pleos.cooldown.domain.model.DrivingEvent
-import com.pleos.cooldown.domain.model.ScoreGrade
 import com.pleos.cooldown.presentation.components.AutomotiveButton
-import com.pleos.cooldown.presentation.components.ScoreDisplay
-import com.pleos.cooldown.presentation.components.ViolationCard
 import com.pleos.cooldown.presentation.theme.*
 
 @Composable
@@ -70,7 +64,7 @@ private fun DashboardContent(
             .background(MaterialTheme.colorScheme.background)
             .padding(24.dp)
     ) {
-        // 왼쪽: 점수 표시
+        // 왼쪽: 속도 & 주행 시작/종료
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -78,13 +72,6 @@ private fun DashboardContent(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            ScoreDisplay(
-                score = state.drivingScore.currentScore,
-                grade = state.drivingScore.grade
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
             // 현재 속도 & 제한속도
             if (state.isMonitoring) {
                 SpeedInfo(
@@ -114,7 +101,7 @@ private fun DashboardContent(
             }
         }
 
-        // 오른쪽: 최근 이벤트 & 메뉴
+        // 오른쪽: 메뉴
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -152,40 +139,19 @@ private fun DashboardContent(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 최근 이벤트 목록
-            Text(
-                text = "최근 이벤트",
-                style = MaterialTheme.typography.titleMedium,
-                color = TextSecondary
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (state.recentEvents.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (state.isMonitoring) "안전운전 중..." else "주행을 시작하세요",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = TextDisabled,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(state.recentEvents.take(5)) { event ->
-                        ViolationCard(event = event)
-                    }
-                }
+            // 새 화면(docs/screen-spec.md)으로 교체될 때까지 비워 둔다
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (state.isMonitoring) "주행 중" else "주행을 시작하세요",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = TextDisabled,
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }
@@ -244,3 +210,4 @@ private fun SpeedInfo(
         }
     }
 }
+

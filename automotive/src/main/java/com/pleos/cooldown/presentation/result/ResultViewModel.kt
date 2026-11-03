@@ -1,7 +1,6 @@
 package com.pleos.cooldown.presentation.result
 
 import androidx.lifecycle.ViewModel
-import com.pleos.cooldown.domain.model.DrivingEvent
 import com.pleos.cooldown.domain.model.ScoreGrade
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,8 +11,7 @@ data class ResultState(
     val grade: ScoreGrade = ScoreGrade.EXCELLENT,
     val durationMinutes: Long = 0,
     val violationCount: Int = 0,
-    val positiveCount: Int = 0,
-    val events: List<DrivingEvent> = emptyList()
+    val positiveCount: Int = 0
 )
 
 class ResultViewModel : ViewModel() {
