@@ -1,9 +1,9 @@
 # 기능명세서 — 쿨다운 코파일럿 (가칭)
 
-> 버전 1.0 · 2026-11-03
+> 버전 1.1 · 2026-11-04 (1.1: F2 운전자 반응·Gleo 연동 추가)
 > 요구사항 ID(`C0-01` 등)는 브랜치·커밋·테스트 이름에서 참조한다.
 > 수치(임계값·시간)는 모두 초기값이며 `CopilotConfig` 한 곳에서 관리하고, 에뮬레이터 모의 주행으로 조정한다.
-> API 시그니처는 SDK jar(Vehicle 2.0.3, NaviHelper 2.0.3)와 Pleos 문서(TextToSpeech·SpeechToText 3.3.1)에서 확인한 것이다.
+> API 시그니처는 SDK jar(Vehicle 2.0.3, NaviHelper 2.0.3)와 Pleos 문서(TextToSpeech·SpeechToText 3.3.1, Gleo Interface 구현 가이드)에서 확인한 것이다.
 
 ---
 
@@ -59,7 +59,8 @@ data/
   hvac/      HvacController (인터페이스), PleosHvacController
   navi/      NaviDataSource, PleosNaviDataSource
   voice/     VoiceOutput, VoiceInput (TTS·STT 래퍼)
-  local/     Room DB: TripEntity, BaselineEntity, InterventionEntity
+  local/     Room DB: TripEntity, BaselineEntity, InterventionEntity, ComfortProfileEntity
+  gleo/      GleoActionReceiver (Gleo Interface 수신·응답)
 domain/
   model/     VehicleSignal, DrivingFeatures, Baseline, DriverState, Trip, Intervention ...
   engine/    FeatureExtractor, BaselineLearner, StateScorer   ← C0 (순수 Kotlin, 단위 테스트 대상)
@@ -215,7 +216,7 @@ data class DriverState(
 ## 4. F2 — 쿨다운 캐빈
 
 ### 4.1 한 문장 요약
-운전이 *평소의 나보다* 거칠어지면, 차가 말없이 설정 온도를 1~2℃ 낮추고 바람을 한 단계 올린다. 운전이 진정되면 원래 설정으로 되돌린다.
+운전이 *평소의 나보다* 거칠어지면, 차가 한 문장으로 알리고 설정 온도를 1~2℃ 낮추고 바람을 한 단계 올린다. 운전이 진정되면 원래 설정으로 되돌린다. 운전자가 춥다고 하면 바로 되돌리고, 다음부터는 덜 차갑게 한다.
 
 **근거:** 기온이 높을수록 경적 사용이 직선적으로 늘었고, 창문을 열고 있던 운전자, 즉 에어컨을 쓰지 않던 운전자에게서 효과가 더 강했다 (Kenrick & MacFarlane, 1986, *Environment and Behavior* 18(2)).
 
@@ -230,6 +231,7 @@ data class DriverState(
                      (1분에 걸쳐 원래 값으로)
 
  어느 상태에서든 운전자가 공조를 직접 조작 ──▶ YIELDED (이번 주행 동안 개입 안 함)
+ 개입 중 "추워"·"그만" (STT 응답창 또는 Gleo) ──▶ 즉시 원래 값으로 복원 후 YIELDED
  어느 상태에서든 주행 종료 ──▶ 개입 중이었다면 즉시 복원 후 IDLE
 ```
 
@@ -254,9 +256,11 @@ data class DriverState(
 | F2-06 | API 호출이 실패하면 상태를 `YIELDED`로 바꾸고 다시 시도하지 않는다 |
 | F2-07 | 설정에서 F2를 끄거나 강도를 고를 수 있다 (약하게: −1℃까지 / 보통: −2℃까지) |
 | F2-08 | 첫 실행 때 정차 중에 동의를 받는다. 동의하지 않으면 F2는 꺼진 상태로 시작한다 |
+| F2-09 | 운전자 반응은 4.7의 세 경로(직접 조작·STT 응답창·Gleo)로 받고, 어느 경로든 결과는 `YIELDED`다. 개입 중이 아닐 때 들어온 반응은 상태를 바꾸지 않는다 |
 
 ### 4.4 투명성
-- 개입하는 순간에는 말하지 않는다.
+- STAGE1에 들어갈 때 TTS 한 문장으로 알린다: "조금 시원하게 해 드릴게요" (SAFE-02). STAGE2와 복원 때는 말하지 않는다.
+- 설정에서 안내 음성을 끌 수 있다. 끄면 STT 응답창(F2-11)도 열지 않는다.
 - 모든 개입을 `InterventionEntity`(시각, 종류, 단계, 지속 시간, 결과)로 기록해서 F4 리포트에 보여준다. 예: "18:52에 4분간 시원하게 해 드렸어요."
 
 ### 4.5 사용 API
@@ -279,6 +283,65 @@ data class DriverState(
 | F2-T5 | STAGE1에서 운전자가 25℃로 바꿈 | 25℃ 유지, 이번 주행 동안 개입 없음 |
 | F2-T6 | 공조 전원이 꺼진 상태에서 점수 90 | 개입 없음 |
 | F2-T7 | 원래 값 21℃에서 STAGE2 | 20℃에서 멈춤 (하한) |
+| F2-T8 | STAGE1 안내 직후 "추워" | 즉시 24℃·풍량 3, 이번 주행 동안 개입 없음, 추위 반응 1회 기록 |
+| F2-T9 | STAGE2에서 Gleo `ADJUST_CABIN_COMFORT(feeling=cold)` 수신 | F2-T8과 같음. 7초 안에 `success` 응답 |
+| F2-T10 | 개입 중이 아닐 때 Gleo `feeling=cold` 수신 | 공조 변화 없음, `success`와 "지금은 조절하고 있지 않아요" 취지의 message로 응답 |
+| F2-T11 | 지난 주행에서 추위 반응 1회 기록, 이번 주행 점수 70 유지 | STAGE2로 가지 않고 −1℃에서 멈춤, 하한 21℃ |
+| F2-T12 | 2회 연속 주행에서 추위 반응 | 다음 주행은 온도는 그대로 두고 풍량만 +1단 |
+| F2-T13 | 정의되지 않은 `feeling` 값 수신 | 공조 변화 없음, `asking`으로 응답 |
+
+### 4.7 운전자 반응 (추위·중단)
+
+운전자가 춥다고 느끼면 손을 쓰지 않아도 바로 되돌릴 수 있어야 한다. 반응 경로를 셋 두고, 모든 반응을 다음 개입에 반영한다.
+
+| 경로 | 운전자 행동 | 처리 | 상태 |
+|---|---|---|---|
+| ① 직접 조작 | 공조 온도·풍량을 직접 바꿈 | F2-04로 감지 → `YIELDED`, 운전자 값 유지 | 필수 |
+| ② STT 응답창 | STAGE1 안내 직후 "추워" / "그만" | 즉시 원래 값 복원 → `YIELDED` | 필수 |
+| ③ Gleo 연동 | 언제든 "글레오, 너무 추워" | Gleo Action 수신 → ②와 같게 처리 | 승인 대기 (4.8) |
+
+| ID | 요구사항 |
+|---|---|
+| F2-10 | **직접 조작 해석:** 개입 중에 운전자가 온도를 올리면 추위 반응으로 기록한다. 풍량만 바꾸거나 온도를 내리면 기록하지 않는다 |
+| F2-11 | **STT 응답창:** STAGE1 안내 TTS가 끝나면 `SpeechToText(Mode.ON_DEVICE).request()`로 8초 동안 듣는다. "추워, 춥다, 추운데" → 추위. "그만, 됐어, 꺼 줘" → 중단. 그 외나 무응답 → 개입 계속. 응답창은 STAGE1 진입 때 한 번만 연다 |
+| F2-12 | **복원 방식:** 추위·중단 반응은 1분에 걸친 점진 복원(`RESTORING`) 대신 저장해 둔 원래 값으로 즉시 되돌린다. 복원 뒤 TTS "원래대로 돌려 드렸어요" (Gleo 경로에서는 Gleo가 말한다, F2-15) |
+| F2-13 | **추위 반응 학습 (`ComfortProfile`):** 추위 반응 1회 이상 → 최대 하강폭 −1℃, 하한 21℃. 2회 연속 주행에서 추위 반응 → 온도는 바꾸지 않고 풍량만 +1단. 이후 5회 주행 동안 추위 반응이 없으면 한 단계씩 원래 강도로 되돌린다. 중단 반응은 기록만 하고 강도에 반영하지 않는다 |
+| F2-14 | **저장·초기화:** `ComfortProfile`은 Room `ComfortProfileEntity`에 저장한다. "운전 습관 다시 배우기"(C0-15)를 누르면 함께 지운다 |
+
+### 4.8 Gleo Interface 연동
+
+Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, 앱이 등록한 function을 Android Intent로 호출하는 공식 연동 방식이다 (Pleos 문서 › Gleo Interface 구현 가이드).
+
+**등록할 function** (최대 3개, description은 영어)
+
+| function | 파라미터 | component | 용도 |
+|---|---|---|---|
+| `ADJUST_CABIN_COMFORT` | `feeling`: `cold` / `stop` | `service` (화면 없이 broadcast) | F2 추위·중단 반응 (경로 ③) |
+| `ANSWER_REST_SUGGESTION` | `accept`: boolean | `service` | F3 휴게소 제안 응답. STT 응답창(F3-03)의 보조 경로 |
+
+- "더워"·"온도 올려 줘" 같은 일반 공조 명령은 등록하지 않는다. Gleo의 기본 공조 기능이 처리하는 영역이고, 앱 function과 겹치면 LLM이 엉뚱한 쪽을 부를 수 있다.
+
+| ID | 요구사항 |
+|---|---|
+| F2-15 | **수신:** 매니페스트에 `exported` broadcast 수신기를 두고 function 이름을 action으로 받는다. 파라미터는 `ACTION_PARAM` extra의 JSON 문자열이다 |
+| F2-16 | **응답:** 7초 안에 `ai.pleos.playground.intent.action.APP_ACTION_RESPONSE` broadcast로 `functionName`·`status`(`success`/`asking`/`fail`)·`message`(영어 한 문장)·`data`를 보낸다. `mode`는 기본값 `voice`로 두어 Gleo가 응답을 말하게 하고, 앱은 TTS를 따로 재생하지 않는다 |
+| F2-17 | **입력 검증:** 누구나 같은 broadcast를 보낼 수 있으므로, 정의된 enum 값만 받고 개입 중일 때만 공조를 바꾼다. 앱이 할 수 있는 일은 "원래 값으로 되돌리기"와 "이번 주행 개입 끄기"뿐이라 오용돼도 위험이 작다 |
+| F2-18 | **stopped 상태:** 설치 후 한 번도 실행하지 않은 앱은 broadcast를 받지 못한다 (실험으로 확인). 온보딩(S1)에서 앱을 한 번 실행하므로 실사용에는 문제없지만, 시연 전에 앱을 한 번 실행한다 |
+
+**에뮬레이터 실험 결과 (2026-11-04, Pleos_Connect_v2.0, Gleo `ai.umos.ambientai` 3.0.5.10)**
+
+| 단계 | 결과 | 근거 로그 |
+|---|---|---|
+| 앱 설치 감지 | 성공 | `getInstalledUserApplications Installed packaged: com.pleos.cooldown` |
+| 스키마 등록 | **실패.** 로컬 `assets/schema.json`이 아니라 서버에서 스키마를 받아 온다 | `GET connect-gw.umos.ai/…/action-call-schema` → `404 Not Found` → "기본 JSON을 사용합니다" |
+| Gleo Action → 앱 수신 (`adb shell am broadcast`로 흉내) | 성공 | `received action=ADJUST_CABIN_COMFORT param={"feeling":"cold"}` |
+| 앱 응답 → Gleo 처리 | 성공 | `processReceiver(): APP_ACTION_RESPONSE` → `"type":"actionCallback","value":"success"` |
+| 음성 호출 | 미시험 | 스키마가 서버에 없어 Gleo가 우리 function을 모른다 |
+
+- 결론: 앱 쪽 구현은 그대로 쓸 수 있고, 음성 호출은 Pleos의 스키마 승인·서버 등록이 끝나야 동작한다.
+- 승인 전 시연: `adb shell am broadcast -a ADJUST_CABIN_COMFORT -p com.pleos.cooldown --es ACTION_PARAM '{"feeling":"cold"}'`로 Gleo와 같은 Intent를 보내고, 영상에 "승인 후 '글레오' 음성으로 동작"이라고 표시한다.
+- 실험 코드: `spike/gleo-interface` 브랜치 (`data/gleo/GleoActionReceiver.kt`, `assets/schema.json`)
+- 우리 앱만의 호출어("00아")는 두지 않는다. STT SDK에는 호출어 기능이 없고(`request()`로만 시작), 직접 만들려면 마이크를 상시 열어야 해서 Gleo와 마이크가 충돌하고 개인정보·심사 위험이 크다.
 
 ---
 
@@ -310,7 +373,7 @@ data class DriverState(
 |---|---|
 | F3-01 | 연속 주행 시간이 40분 미만이면 피로 점수와 상관없이 개입하지 않는다 (짧은 주행에서 오탐 방지) |
 | F3-02 | F2와 F3가 동시에 조건을 만족하면 F2를 우선한다. 공조 제어는 한 번에 한 정책만 소유한다 (`HvacController`가 소유권 관리) |
-| F3-03 | 응답 인식: "응, 네, 그래, 좋아, 가자" → 수락. "아니, 괜찮아, 됐어" → 거절. 그 외나 무응답 → 거절로 처리 |
+| F3-03 | 응답 인식: "응, 네, 그래, 좋아, 가자" → 수락. "아니, 괜찮아, 됐어" → 거절. 그 외나 무응답 → 거절로 처리. Gleo 연동이 승인되면 `ANSWER_REST_SUGGESTION`(4.8)으로도 응답을 받는다 |
 | F3-04 | 휴게소 정보: NaviHelper에 POI 검색 API가 있는지 확인이 필요하다. 없으면 문구를 "두 시간째 운전 중이에요. 다음 휴게소에서 쉬어 가세요."로 바꾸고 응답을 받지 않는다 |
 | F3-05 | 내비 안내 음성과 겹치지 않도록, 다음 회전 안내(TBT)까지 500m 미만이면 제안을 미룬다 |
 | F3-06 | 제안은 한 주행에서 최대 3회까지만 한다 |
@@ -416,6 +479,13 @@ data class DriverState(
 @Entity data class BaselineEntity(
     @PrimaryKey val id: Int = 0, val json: String, val totalTrips: Int, val totalMinutes: Double,
 )
+@Entity data class ComfortProfileEntity(   // F2-13
+    @PrimaryKey val id: Int = 0,
+    val maxDropC: Float,            // 2.0 → 1.0 → 0.0(풍량만)
+    val floorC: Float,              // 20.0 → 21.0
+    val consecutiveColdTrips: Int,
+    val tripsSinceLastCold: Int,
+)
 ```
 
 ---
@@ -442,8 +512,9 @@ data class DriverState(
 | `pleos.car.permission.CAR_DRIVE` | 기어·브레이크·조향·주행 거리 | 추가 |
 | `pleos.car.permission.CAR_CLIMATE` | 공조 상태 조회 | F2 작업 때 추가 |
 | `pleos.car.permission.CONTROL_CAR_CLIMATE` | 공조 제어 | F2 작업 때 추가 **(사전 승인 필요)** |
-| `pleos.car.permission.TTS_SERVICE` | 음성 합성 | F3 작업 때 추가 |
-| `pleos.car.permission.STT_SERVICE` | 음성 인식 | F3 작업 때 추가 |
+| `pleos.car.permission.TTS_SERVICE` | 음성 합성 (F2 안내, F3 제안) | F2 작업 때 추가 |
+| `pleos.car.permission.STT_SERVICE` | 음성 인식 (F2 응답창, F3 응답) | F2 작업 때 추가 |
+| (권한 없음) Gleo Action 수신기 | F2·F3 Gleo 연동 (4.8) | F2 작업 때 추가 |
 | `pleos.car.permission.NAVI_ROUTE` 계열 | 경로·TBT·경유지 | 필요한 것만 남김 (F1 작업 때 정리) |
 | `CAR_INFO`, `CAR_ENERGY`, `pleos.car.permission.CAR_SPEED` | — | **삭제** (쓰지 않거나 존재하지 않음) |
 
@@ -476,3 +547,6 @@ data class DriverState(
 | POI(휴게소) 검색 | F3 | NaviHelper jar·문서 | F3-04 |
 | 주행 거리 단위 | F4 | 에뮬레이터 로그 | — |
 | 공모전 시연에서 LLM 사용 가능 여부 | X1 | — | 템플릿 문장 |
+| Gleo 스키마 승인·서버 등록 절차와 기간 | F2 경로 ③, F3 보조 경로 | Pleos Playground 문의 (배포·심사 문서 17개에는 언급 없음) | `adb` broadcast로 시연 (4.8) |
+| App Schema `invokeWord` 필드의 의미 | F2 경로 ③ | 문의 (문서 예시에만 있고 설명 없음) | 생략 |
+| TTS 직후 STT 자동 시작 시 차량 UI·알림음 | F2-11 | 에뮬레이터 실험 | 응답창 없이 경로 ①·③만 사용 |
