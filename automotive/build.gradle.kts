@@ -37,6 +37,8 @@ android {
     buildFeatures {
         compose = true
     }
+    // AAOS CarPropertyManager (차속)
+    useLibrary("android.car")
 }
 
 dependencies {
@@ -62,9 +64,6 @@ dependencies {
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.lifecycle.viewmodel.compose)
     debugImplementation(libs.compose.ui.tooling)
-
-    // Shared module
-    implementation(project(":shared"))
 
     // Testing
     testImplementation(libs.junit)

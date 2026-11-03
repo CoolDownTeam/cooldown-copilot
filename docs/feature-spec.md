@@ -465,7 +465,7 @@ data class DriverState(
 | `appCategory="game"` | 제거 (기본값 사용). Pleos 마켓 카테고리는 콘솔 등록 정보에서 정함 `[확인 필요]` | 11/3 |
 | `TrafficViolation`, `DrivingScore`, 대시보드 점수 판정 | 삭제, C0로 교체 | 11/4 |
 | 대시보드·결과·기록 화면 | 주행 중 최소 화면, F4 리포트, 기록 화면으로 재사용 | 11/9 |
-| `shared` 모듈의 `MyMusicService` (템플릿 잔재, 미디어 서비스로 등록됨) | 삭제 | 11/9 |
+| `shared` 모듈의 `MyMusicService` (템플릿 잔재, `appCategory="audio"` 미디어 서비스로 등록됨) | automotive에서 `shared` 의존성 제거. 그래야 앱이 미디어 앱으로 병합되지 않음 | 11/3 완료 |
 
 ## 12. 미확인 항목
 
