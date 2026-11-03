@@ -1,6 +1,6 @@
 # 기능명세서 — 쿨다운 코파일럿 (가칭)
 
-> 버전 1.1 · 2026-11-04 (1.1: F2 운전자 반응·Gleo 연동 추가)
+> 버전 1.2 · 2026-11-04 (1.1: F2 운전자 반응·Gleo 연동 추가 / 1.2: F2 계절·운전자별 강도 학습, 화면 명세 분리 → `docs/screen-spec.md`)
 > 요구사항 ID(`C0-01` 등)는 브랜치·커밋·테스트 이름에서 참조한다.
 > 수치(임계값·시간)는 모두 초기값이며 `CopilotConfig` 한 곳에서 관리하고, 에뮬레이터 모의 주행으로 조정한다.
 > API 시그니처는 SDK jar(Vehicle 2.0.3, NaviHelper 2.0.3)와 Pleos 문서(TextToSpeech·SpeechToText 3.3.1, Gleo Interface 구현 가이드)에서 확인한 것이다.
@@ -64,7 +64,7 @@ data/
 domain/
   model/     VehicleSignal, DrivingFeatures, Baseline, DriverState, Trip, Intervention ...
   engine/    FeatureExtractor, BaselineLearner, StateScorer   ← C0 (순수 Kotlin, 단위 테스트 대상)
-  cooldown/  CooldownPolicy                                   ← F2 상태 머신 (순수 Kotlin)
+  cooldown/  CooldownPolicy, ComfortLearner                   ← F2 상태 머신·계절별 강도 학습 (순수 Kotlin)
   fatigue/   FatiguePolicy                                    ← F3 상태 머신 (순수 Kotlin)
   briefing/  HardSectionDetector, BriefingComposer            ← F1 (순수 Kotlin)
   report/    TripSummarizer                                   ← F4
@@ -73,7 +73,7 @@ service/
 di/
   AppContainer    ← 수동 DI. 실제/가짜 데이터 소스 교체 지점
 presentation/
-  onboarding/ report/ history/ settings/ driving/ (주행 중 최소 화면)
+  onboarding/ home/ driving/ report/ history/ settings/   ← 화면 명세 docs/screen-spec.md (SC-01~06)
 util/
   Clock, CopilotConfig
 ```
@@ -238,9 +238,9 @@ data class DriverState(
 | 상태 | 진입 조건 | 동작 |
 |---|---|---|
 | `IDLE` | 시작, 또는 잠금 해제 | 없음 |
-| `STAGE1` | 공격성 점수 ≥ T(개인화 60 / 학습 모드 75)가 30초 이상 유지 | ① 현재 설정 온도·풍량·공조 전원 상태를 저장 ② 설정 온도 −1℃ ③ 풍량 +1단 |
-| `STAGE2` | STAGE1에서 2분이 지나도 점수 ≥ T | 설정 온도 −1℃ 추가 (원래 값 대비 −2℃) |
-| `RESTORING` | 점수 < 40이 5분 이상 유지 | 1분 동안 온도를 0.5℃씩, 풍량을 1단씩 원래 값으로 되돌림 |
+| `STAGE1` | 공격성 점수 ≥ T(개인화 60 / 학습 모드 75)가 30초 이상 유지 | ① 현재 설정 온도·풍량·풍향·통풍시트·공조 전원 상태를 저장 ② 현재 강도 단계(4.7.1)의 1단계 동작: 설정 온도 −min(1℃, D) ③ 풍량 +1단 ④ 겨울 구간이면 풍향을 얼굴 쪽으로 |
+| `STAGE2` | STAGE1에서 2분이 지나도 점수 ≥ T | 설정 온도를 원래 값 대비 −D까지 추가로 낮춤. 여름 L3이면 통풍시트 켜기 (지원 차량만). D ≤ 1이면 온도는 더 바꾸지 않는다 |
+| `RESTORING` | 점수 < 40이 5분 이상 유지 | 1분 동안 온도를 0.5℃씩, 풍량을 1단씩 원래 값으로 되돌림. 풍향·통풍시트는 마지막에 원래 값으로 |
 | `COOLDOWN_LOCK` | 복원 완료 | 15분 동안 재개입하지 않음 |
 | `YIELDED` | 개입 중에 운전자가 온도나 풍량을 바꿈 | **복원하지 않고**(운전자가 정한 값을 존중) 이번 주행 동안 개입하지 않음 |
 
@@ -248,13 +248,13 @@ data class DriverState(
 
 | ID | 규칙 |
 |---|---|
-| F2-01 | 온도 하한: max(원래 값 − 2℃, 20℃, 차량이 지원하는 최솟값). 지원 범위는 `checkHvacTemperatureCapabilities`의 `AreaBounds`로 확인 |
+| F2-01 | 온도 하한: max(원래 값 − D, 개인 기준 온도 − D, 18℃, 차량이 지원하는 최솟값). D는 현재 강도 단계의 최대 하강폭(4.7.1). 지원 범위는 `checkHvacTemperatureCapabilities`의 `AreaBounds`로 확인 |
 | F2-02 | 풍량 상한: min(원래 값 + 1, 차량이 지원하는 최댓값) |
 | F2-03 | 공조 전원이 꺼져 있으면(`getHvacPowerState` = false) 개입하지 않는다 |
 | F2-04 | **운전자 조작 감지:** `registerHvacTemperature`·`registerHvacFanSpeed`로 값 변경을 구독한다. 앱이 마지막으로 설정한 값과 다른 값이 들어오면 운전자 조작으로 본다. 앱이 값을 바꾼 직후 2초 동안 들어오는 콜백은 앱 자신의 변경으로 본다 |
 | F2-05 | 적용 좌석은 운전석(`SeatArea(SeatValue.ROW_1_LEFT)`)으로 한다. 좌핸들 기준이며 우핸들 차량은 확인 필요 |
 | F2-06 | API 호출이 실패하면 상태를 `YIELDED`로 바꾸고 다시 시도하지 않는다 |
-| F2-07 | 설정에서 F2를 끄거나 강도를 고를 수 있다 (약하게: −1℃까지 / 보통: −2℃까지) |
+| F2-07 | 설정에서 F2를 끌 수 있다. 강도는 직접 고르지 않고 학습된 계절별 강도를 보여 준다 ("여름: 최대 −2℃ · 바람 · 통풍시트"). "운전 습관 다시 배우기"로 초기화한다 |
 | F2-08 | 첫 실행 때 정차 중에 동의를 받는다. 동의하지 않으면 F2는 꺼진 상태로 시작한다 |
 | F2-09 | 운전자 반응은 4.7의 세 경로(직접 조작·STT 응답창·Gleo)로 받고, 어느 경로든 결과는 `YIELDED`다. 개입 중이 아닐 때 들어온 반응은 상태를 바꾸지 않는다 |
 
@@ -271,24 +271,33 @@ data class DriverState(
 | 현재 값 | `HVAC.getHvacTemperature(SeatArea, TemperatureUnit, …)`, `getHvacFanSpeed(SeatArea, …)`, `getHvacPowerState(SeatArea, …)` | `CAR_CLIMATE` |
 | 변경 | `HVAC.setHvacTemperature(SeatArea, Float, TemperatureUnit, …)`, `setHvacFanSpeed(SeatArea, Int, …)` | `CONTROL_CAR_CLIMATE` **(Pleos App Market 사전 승인 필요)** |
 | 운전자 조작 감지 | `HVAC.registerHvacTemperature(SeatArea, HvacTemperatureListener)`, `registerHvacFanSpeed` | `CAR_CLIMATE` |
+| 풍향 (겨울) | `HVAC.checkHvacFanDirectionCapabilities`, `getHvacFanDirection`, `setHvacFanDirection(SeatArea, FanDirectionType, …)` | 조회 `CAR_CLIMATE`, 변경 `CONTROL_CAR_CLIMATE` `[확인 필요]` |
+| 통풍시트 (여름) | `Seat.getHvacSeatVentilationState`, `setHvacSeatVentilation`, `registerHvacSeatVentilation` | `[확인 필요]` |
+| 외기온 (계절 판단) | AAOS `CarPropertyManager` · `VehiclePropertyIds.ENV_OUTSIDE_TEMPERATURE` (Pleos HVAC SDK에는 없음) | `android.car.permission.CAR_EXTERIOR_ENVIRONMENT` |
 
 ### 4.6 수용 기준
 
 | ID | 시나리오 | 기대 결과 |
 |---|---|---|
-| F2-T1 | 24℃·풍량 3에서 공격성 점수 70이 30초 유지 | 23℃·풍량 4 |
+| F2-T1 | 여름 L3·기준 온도 24℃, 24℃·풍량 3에서 공격성 점수 70이 30초 유지 | 23℃·풍량 4 |
 | F2-T2 | 이어서 2분 동안 점수 70 유지 | 22℃·풍량 4 |
 | F2-T3 | 이어서 점수 30이 5분 유지 | 1분에 걸쳐 24℃·풍량 3으로 복원 |
 | F2-T4 | 복원 후 10분 안에 다시 점수 70 | 개입 없음 (잠금) |
 | F2-T5 | STAGE1에서 운전자가 25℃로 바꿈 | 25℃ 유지, 이번 주행 동안 개입 없음 |
 | F2-T6 | 공조 전원이 꺼진 상태에서 점수 90 | 개입 없음 |
-| F2-T7 | 원래 값 21℃에서 STAGE2 | 20℃에서 멈춤 (하한) |
+| F2-T7 | 여름 L3·기준 온도 22℃, 원래 값 21℃에서 STAGE2 | 20℃에서 멈춤 (기준 온도 − 2℃ 하한) |
 | F2-T8 | STAGE1 안내 직후 "추워" | 즉시 24℃·풍량 3, 이번 주행 동안 개입 없음, 추위 반응 1회 기록 |
 | F2-T9 | STAGE2에서 Gleo `ADJUST_CABIN_COMFORT(feeling=cold)` 수신 | F2-T8과 같음. 7초 안에 `success` 응답 |
 | F2-T10 | 개입 중이 아닐 때 Gleo `feeling=cold` 수신 | 공조 변화 없음, `success`와 "지금은 조절하고 있지 않아요" 취지의 message로 응답 |
-| F2-T11 | 지난 주행에서 추위 반응 1회 기록, 이번 주행 점수 70 유지 | STAGE2로 가지 않고 −1℃에서 멈춤, 하한 21℃ |
-| F2-T12 | 2회 연속 주행에서 추위 반응 | 다음 주행은 온도는 그대로 두고 풍량만 +1단 |
+| F2-T11 | 여름 L3에서 "추워" | 여름 구간만 L2로 내려감. 봄·가을·겨울 강도는 그대로 |
+| F2-T12 | 여름 L2에서 점수 70 유지 | −1℃·풍량 +1에서 멈춤 (STAGE2에서 온도 추가 변경 없음) |
 | F2-T13 | 정의되지 않은 `feeling` 값 수신 | 공조 변화 없음, `asking`으로 응답 |
+| F2-T14 | 겨울(외기 3℃) L1, 점수 70 유지 | 온도 그대로, 풍향 얼굴 쪽, 풍량 +1. 복원 때 풍향도 원래대로 |
+| F2-T15 | 여름 L3·통풍시트 지원 차량, STAGE2 진입 | 통풍시트 켬. 복원 때 원래 상태로 |
+| F2-T16 | 서로 다른 두 주행에서 개입 중 운전자가 풍량을 내림 | 두 번째 뒤에 그 구간 강도 한 단계 내림 |
+| F2-T17 | 여름 L2에서 반응 없이 정상 복원 3회 | L3으로 올라감. 기본값(L3) 위로는 올라가지 않음 |
+| F2-T18 | 외기온을 읽지 못함, 1월 | 겨울 구간으로 판단 |
+| F2-T19 | 주행 시작 때 설정 온도 26℃, 기존 여름 기준 온도 24℃ | 기준 온도 24.4℃ (α = 0.2) |
 
 ### 4.7 운전자 반응 (추위·중단)
 
@@ -302,11 +311,42 @@ data class DriverState(
 
 | ID | 요구사항 |
 |---|---|
-| F2-10 | **직접 조작 해석:** 개입 중에 운전자가 온도를 올리면 추위 반응으로 기록한다. 풍량만 바꾸거나 온도를 내리면 기록하지 않는다 |
+| F2-10 | **직접 조작 해석:** 개입 중에 운전자가 온도를 올리면 강한 추위 신호(F2-20), 풍량을 내리거나 풍향을 바꾸면 약한 신호(F2-21)로 기록한다. 온도를 내리거나 풍량을 올리면 기록하지 않는다 |
 | F2-11 | **STT 응답창:** STAGE1 안내 TTS가 끝나면 `SpeechToText(Mode.ON_DEVICE).request()`로 8초 동안 듣는다. "추워, 춥다, 추운데" → 추위. "그만, 됐어, 꺼 줘" → 중단. 그 외나 무응답 → 개입 계속. 응답창은 STAGE1 진입 때 한 번만 연다 |
 | F2-12 | **복원 방식:** 추위·중단 반응은 1분에 걸친 점진 복원(`RESTORING`) 대신 저장해 둔 원래 값으로 즉시 되돌린다. 복원 뒤 TTS "원래대로 돌려 드렸어요" (Gleo 경로에서는 Gleo가 말한다, F2-15) |
-| F2-13 | **추위 반응 학습 (`ComfortProfile`):** 추위 반응 1회 이상 → 최대 하강폭 −1℃, 하한 21℃. 2회 연속 주행에서 추위 반응 → 온도는 바꾸지 않고 풍량만 +1단. 이후 5회 주행 동안 추위 반응이 없으면 한 단계씩 원래 강도로 되돌린다. 중단 반응은 기록만 하고 강도에 반영하지 않는다 |
-| F2-14 | **저장·초기화:** `ComfortProfile`은 Room `ComfortProfileEntity`에 저장한다. "운전 습관 다시 배우기"(C0-15)를 누르면 함께 지운다 |
+| F2-13 | **추위 반응 학습:** 반응은 그 주행의 계절 구간 강도에만 반영한다 (4.7.1). 중단 반응("그만")은 기록만 하고 강도에 반영하지 않는다 |
+| F2-14 | **저장·초기화:** 계절 구간별 강도와 기준 온도는 Room `ComfortProfileEntity`에 구간당 한 행으로 저장한다. "운전 습관 다시 배우기"(C0-15)를 누르면 함께 지운다 |
+
+#### 4.7.1 계절·운전자별 강도 학습 (`ComfortLearner`)
+
+같은 −2℃라도 한여름과 한겨울에 느끼는 정도가 다르고, 사람마다 평소 맞춰 두는 온도도 다르다. 그래서 **운전자 프로필 × 계절 구간**마다 강도와 기준 온도를 따로 배운다.
+
+**계절 구간** (주행 시작 때 한 번 정하고 그 주행 동안 바꾸지 않는다)
+
+| 구간 | 외기온 | 기본 강도 | 수단 |
+|---|---|---|---|
+| `SUMMER` | 25℃ 이상 | L3 | 온도를 낮춤, 풍량 +1, L3이면 통풍시트 |
+| `MILD` | 10~25℃ | L2 | 온도를 낮춤, 풍량 +1 |
+| `WINTER` | 10℃ 미만 | L1 | 온도는 그대로, 풍향 얼굴 쪽, 풍량 +1. 열선시트·핸들 열선은 건드리지 않는다 ("머리는 시원하게, 몸은 따뜻하게") |
+
+**강도 단계** (D = 최대 하강폭)
+
+| 단계 | D | 동작 |
+|---|---|---|
+| L3 | 2℃ | 그 구간의 수단 전부 |
+| L2 | 1℃ | 온도 변화 절반, 통풍시트 없음 |
+| L1 | 0℃ | 바람만 (풍량 +1, 겨울이면 풍향) |
+| L0 | — | 그 구간에서는 개입하지 않고, 리포트에 "이럴 때 시원하게 해 드릴 수 있어요"로만 남긴다 |
+
+| ID | 요구사항 |
+|---|---|
+| F2-19 | **계절 판단:** 주행 시작 때 `ENV_OUTSIDE_TEMPERATURE`를 읽어 구간을 정한다. 값을 못 읽으면 달로 정한다 (6~9월 `SUMMER`, 12~2월 `WINTER`, 그 외 `MILD`) |
+| F2-20 | **강한 신호:** 음성 "추워"(STT·Gleo), 또는 개입 중 운전자가 온도를 올림 → 즉시 복원하고 그 구간 강도를 한 단계 내린다 (최저 L0) |
+| F2-21 | **약한 신호:** 개입 중 운전자가 풍량을 내리거나 풍향을 바꿈 → 약한 신호 1점. 2점이 쌓이면 한 단계 내리고 0점으로 되돌린다 |
+| F2-22 | **긍정 신호:** 반응 없이 `RESTORING`까지 정상으로 끝난 개입 → 연속 1회. 3회가 쌓이면 한 단계 올린다. 그 구간의 기본 강도보다 높이지 않는다. 강한·약한 신호가 오면 연속 횟수는 0으로 |
+| F2-23 | **개인 기준 온도:** 주행 시작 때(개입 전) 설정 온도를 그 구간 기준 온도에 지수이동평균으로 반영한다 (α = 0.2, 첫 값은 그대로). 하한(F2-01)은 이 값에서 D를 뺀 값이다 |
+| F2-24 | **운전자 구분:** AAOS는 운전자 프로필마다 Android 사용자를 따로 두고 앱 데이터도 따로 저장하므로, Room DB가 프로필별로 나뉜다. 별도 구현은 하지 않는다 `[확인 필요: Pleos 프로필 = Android 사용자 1:1인지]`. 한 프로필을 여럿이 쓰면 구분하지 못한다 (리포트·기획서에 한계로 적는다) |
+| F2-25 | **학습 모드:** C0 학습 모드(C0-10) 동안에도 강도는 구간 기본값으로 시작하고, 반응 학습은 그대로 한다 |
 
 ### 4.8 Gleo Interface 연동
 
@@ -447,17 +487,10 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 ## 7. F4 — 주행 리포트
 
 ### 7.1 표시 조건
-주행이 끝나고(0.3 정의) 정차 중일 때 자동으로 보여준다. 주행 중에는 열 수 없다.
+주행이 끝나고(0.3 정의) 정차 중일 때, 주행 시간이 5분 이상이면 자동으로 보여준다. 주행 중에는 열 수 없다. 화면 구성·문구는 `docs/screen-spec.md` 4절을 따른다.
 
 ### 7.2 화면 구성
-
-| 영역 | 내용 | 예시 |
-|---|---|---|
-| 헤드라인 | 기준선 대비 이번 주행의 안정도 | "평소보다 차분한 주행이었어요" |
-| 개입 기록 | F2·F3 개입 목록 | "18:52에 4분간 시원하게 해 드렸어요" / "휴게소 제안 1회" |
-| 어려운 구간 | F1이 브리핑한 구간 통과 결과 (그 구간의 공격성 점수) | "브리핑한 연속 분기 2곳을 안정적으로 통과했어요" |
-| 추세 | 최근 7회 주행의 평균 공격성·피로 점수 | 막대 그래프 |
-| 학습 상태 | 학습 모드라면 진행률 | "운전 습관을 배우는 중이에요 (3/5회)" |
+`docs/screen-spec.md` 4절(SC-04)을 따른다. 헤드라인 문장, 숫자 3개, 개입 타임라인(학습 결과 문구 포함), 최근 7회 공격성·피로 추세, 학습 상태로 구성한다.
 
 ### 7.3 저장 모델 (Room)
 
@@ -479,12 +512,12 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 @Entity data class BaselineEntity(
     @PrimaryKey val id: Int = 0, val json: String, val totalTrips: Int, val totalMinutes: Double,
 )
-@Entity data class ComfortProfileEntity(   // F2-13
-    @PrimaryKey val id: Int = 0,
-    val maxDropC: Float,            // 2.0 → 1.0 → 0.0(풍량만)
-    val floorC: Float,              // 20.0 → 21.0
-    val consecutiveColdTrips: Int,
-    val tripsSinceLastCold: Int,
+@Entity data class ComfortProfileEntity(   // F2-14, 4.7.1 — 계절 구간당 한 행
+    @PrimaryKey val band: String,   // SUMMER / MILD / WINTER
+    val level: Int,                 // 0~3
+    val baselineTempC: Float?,      // 개인 기준 온도 (F2-23)
+    val weakSignals: Int,           // F2-21
+    val positiveStreak: Int,        // F2-22
 )
 ```
 
@@ -492,15 +525,14 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 
 ## 8. S1 — 온보딩·설정
 
-| 화면 | 내용 |
-|---|---|
-| 온보딩 1 | "평소의 운전을 배워요" — 처음 5번은 학습 기간이라는 안내 |
-| 온보딩 2 | "운전이 거칠어지면 실내를 시원하게 해 드려요" — F2 동의 (동의 / 나중에) |
-| 온보딩 3 | "졸리면 바람을 바꾸고 휴게소를 알려 드려요" — F3 동의 |
-| 설정 | F1·F2·F3 켜기/끄기, F2 강도, 기준선 초기화, 기록 전체 삭제 |
+화면 구성·문구는 `docs/screen-spec.md` 2절(SC-01 온보딩)과 7절(SC-06 설정)을 따른다.
 
-- 설정과 온보딩은 정차 중에만 열 수 있다. 주행이 시작되면 주행 중 화면으로 바뀐다.
-- 주행 중 화면: 앱 로고, 현재 상태 한 줄("평소대로 운전 중" / "시원하게 해 드리는 중"), 입력 UI 없음.
+| ID | 요구사항 |
+|---|---|
+| S1-01 | 온보딩은 3단계(소개 → 공조 자동 조절 동의·권한 → 학습·음성 안내)이고 정차 중에만 진행한다. 2단계에서 "나중에"를 고르면 F2·F3는 꺼진 채로 시작한다 (F2-08) |
+| S1-02 | 설정에서 F1·F2·F3·음성 안내를 켜고 끈다. F2 강도는 직접 고르지 않고 학습된 계절별 강도와 기준 온도를 보여 준다 (F2-07) |
+| S1-03 | "운전 습관 다시 배우기"는 C0 기준선과 `ComfortProfileEntity`를 지운다. "기록 전체 삭제"는 Trip·Intervention을 지운다 |
+| S1-04 | 설정과 온보딩은 정차 중에만 열 수 있다. 주행이 시작되면 주행 중 화면(SC-03)으로 바뀐다 |
 
 ---
 
@@ -511,6 +543,7 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 | `android.car.permission.CAR_SPEED` | 차속 (AAOS) | 추가 |
 | `pleos.car.permission.CAR_DRIVE` | 기어·브레이크·조향·주행 거리 | 추가 |
 | `pleos.car.permission.CAR_CLIMATE` | 공조 상태 조회 | F2 작업 때 추가 |
+| `android.car.permission.CAR_EXTERIOR_ENVIRONMENT` | 외기온 (계절 판단, F2-19) | F2 작업 때 추가 |
 | `pleos.car.permission.CONTROL_CAR_CLIMATE` | 공조 제어 | F2 작업 때 추가 **(사전 승인 필요)** |
 | `pleos.car.permission.TTS_SERVICE` | 음성 합성 (F2 안내, F3 제안) | F2 작업 때 추가 |
 | `pleos.car.permission.STT_SERVICE` | 음성 인식 (F2 응답창, F3 응답) | F2 작업 때 추가 |
@@ -535,7 +568,7 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 | `PleosVehicleDataSource` (속도 리스너 미등록, 기어만) | D0로 재작성 | 11/3 |
 | `appCategory="game"` | 제거 (기본값 사용). Pleos 마켓 카테고리는 콘솔 등록 정보에서 정함 `[확인 필요]` | 11/3 |
 | `TrafficViolation`, `DrivingScore`, 대시보드 점수 판정 | 삭제, C0로 교체 | 11/4 |
-| 대시보드·결과·기록 화면 | 주행 중 최소 화면, F4 리포트, 기록 화면으로 재사용 | 11/9 |
+| 대시보드·결과·기록·설정 화면 | **폐기.** `docs/screen-spec.md`대로 새로 만든다 | 11/9 |
 | `shared` 모듈의 `MyMusicService` (템플릿 잔재, `appCategory="audio"` 미디어 서비스로 등록됨) | automotive에서 `shared` 의존성 제거. 그래야 앱이 미디어 앱으로 병합되지 않음 | 11/3 완료 |
 
 ## 12. 미확인 항목
@@ -550,3 +583,7 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 | Gleo 스키마 승인·서버 등록 절차와 기간 | F2 경로 ③, F3 보조 경로 | Pleos Playground 문의 (배포·심사 문서 17개에는 언급 없음) | `adb` broadcast로 시연 (4.8) |
 | App Schema `invokeWord` 필드의 의미 | F2 경로 ③ | 문의 (문서 예시에만 있고 설명 없음) | 생략 |
 | TTS 직후 STT 자동 시작 시 차량 UI·알림음 | F2-11 | 에뮬레이터 실험 | 응답창 없이 경로 ①·③만 사용 |
+| 에뮬레이터·차량의 `ENV_OUTSIDE_TEMPERATURE` 제공 여부 | F2-19 | 에뮬레이터 `cmd car_service get-property-value` | 달로 판단 |
+| 풍향·통풍시트 제어 권한 | 4.7.1 (겨울·여름 수단) | SDK jar 권한 어노테이션, 문서 | 해당 수단 없이 온도·풍량만 |
+| Pleos 운전자 프로필 = Android 사용자 1:1 여부 | F2-24 (운전자별 학습) | 에뮬레이터에서 프로필 전환 후 `am get-current-user` | 프로필 구분 없이 학습 (한계로 명시) |
+| 차량 화면 해상도별 레이아웃·타이포그래피 토큰 | 화면 명세 | Pleos 디자인 가이드 | 14.6 기준 단일 레이아웃 |
