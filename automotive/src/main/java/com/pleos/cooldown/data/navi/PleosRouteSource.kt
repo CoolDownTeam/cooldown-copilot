@@ -160,7 +160,8 @@ class PleosRouteSource(context: Context) : RouteSource {
     fun requestDemoRoute(latitude: Double, longitude: Double, name: String) {
         val n = navi ?: return
         try {
-            n.requestRoute(RouteInfo(latitude, longitude, name, "", "", "", RouteOption.RECOMMENDED))
+            // RouteInfo 생성자는 경도가 먼저다 (필드 순서 longitude, latitude — SDK jar 확인)
+            n.requestRoute(RouteInfo(longitude, latitude, name, "", "", "", RouteOption.RECOMMENDED))
         } catch (e: Exception) {
             Log.w(TAG, "demo route failed", e)
         }
