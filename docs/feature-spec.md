@@ -1,6 +1,6 @@
 # 기능명세서 — 쿨다운 코파일럿 (가칭)
 
-> 버전 1.3 · 2026-11-04 (1.1: F2 운전자 반응·Gleo 연동 추가 / 1.2: F2 계절·운전자별 강도 학습, 화면 명세 분리 → `docs/screen-spec.md` / 1.3: C0 구현 반영 — 피로 점수 변환, 속도대 히스테리시스, 임계값 개인화 보류)
+> 버전 1.4 · 2026-11-04 (1.1: F2 운전자 반응·Gleo 연동 추가 / 1.2: F2 계절·운전자별 강도 학습, 화면 명세 분리 → `docs/screen-spec.md` / 1.3: C0 구현 반영 — 피로 점수 변환, 속도대 히스테리시스, 임계값 개인화 보류 / 1.4: F3를 예방·감지·휴식 유도 3단계로 재설계)
 > 요구사항 ID(`C0-01` 등)는 브랜치·커밋·테스트 이름에서 참조한다.
 > 수치(임계값·시간)는 모두 초기값이며 `CopilotConfig` 한 곳에서 관리하고, 에뮬레이터 모의 주행으로 조정한다.
 > API 시그니처는 SDK jar(Vehicle 2.0.3, NaviHelper 2.0.3)와 Pleos 문서(TextToSpeech·SpeechToText 3.3.1, Gleo Interface 구현 가이드)에서 확인한 것이다.
@@ -10,7 +10,7 @@
 ## 0. 개요
 
 ### 0.1 제품 한 문장
-평소의 나를 학습한 AI가 운전이 거칠어지거나 졸릴 때 실내 공기를 바꿔 주고, 어려운 길은 출발 전에 미리 알려 주는 무상호작용 코파일럿.
+평소의 나를 학습한 AI가 운전이 거칠어지면 실내를 식혀 주고, 졸음은 실내 공기로 미리 막고 조향으로 잡아 실제로 쉬게 만드는 무상호작용 코파일럿. 어려운 길은 출발 전에 미리 알려 준다.
 
 ### 0.2 기능 목록
 
@@ -19,7 +19,7 @@
 | D0 | 차량 데이터 계층 | 항상 | 없음 | 필수 |
 | C0 | 운전 패턴 엔진 (개인 기준선 학습) | 항상 (백그라운드) | 없음 | 필수 |
 | F2 | 쿨다운 캐빈 | 주행 중 | 없음 | 필수 |
-| F3 | 피로 케어 | 주행 중 | "응/아니" 음성 한마디 (선택) | 필수 |
+| F3 | 피로 케어 (예방·감지·휴식 유도) | 주행 중 (예방은 항상) | "응/아니" 음성 한마디 (선택) | 필수 |
 | F1 | 코스 브리핑 | 출발 전(P단) + 어려운 구간 직전 | 없음 (자동 재생) | 필수 |
 | F4 | 주행 리포트 | 도착 후(P단) | 정차 중 터치 | 필수 |
 | S1 | 온보딩·설정 | 첫 실행, 정차 중 | 정차 중 터치 | 필수 |
@@ -65,7 +65,7 @@ domain/
   model/     VehicleSignal, DrivingFeatures, Baseline, DriverState, Trip, Intervention ...
   engine/    FeatureExtractor, BaselineLearner, StateScorer   ← C0 (순수 Kotlin, 단위 테스트 대상)
   cooldown/  CooldownPolicy, ComfortLearner                   ← F2 상태 머신·계절별 강도 학습 (순수 Kotlin)
-  fatigue/   FatiguePolicy                                    ← F3 상태 머신 (순수 Kotlin)
+  fatigue/   FatiguePolicy, FreshAirPolicy                    ← F3 휴식 유도 상태 머신·실내 공기 예방 (순수 Kotlin)
   briefing/  HardSectionDetector, BriefingComposer            ← F1 (순수 Kotlin)
   report/    TripSummarizer                                   ← F4
 service/
@@ -162,7 +162,7 @@ interface VehicleDataSource {
 | C0-07 | 조향 정지 시간 비율 | 조향 변화가 0.5°/s 미만으로 유지된 시간의 비율 (직진 구간에서) | 피로 지표 (무뎌짐) |
 | C0-08 | 연속 주행 시간 | 마지막으로 5분 넘게 정차한 뒤부터 흐른 시간 | 피로 지표 |
 
-- 특징은 **현재 속도대**별로 따로 집계한다. 속도대가 바뀌면 새 창을 쓴다.
+- 특징은 **속도대별로 따로** 집계한다. 속도대마다 최근 3분 창을 따로 두고, 속도대가 바뀌면 그 속도대의 창으로 바꿔 쓴다(지우지 않는다). 횟수/분의 분모는 최근 3분 중 그 속도대에서 보낸 시간이다. 처음에는 바뀔 때 창을 새로 썼지만, 에뮬레이터 확인에서 60km/h 근처를 오가는 거친 운전이 계속 지워져 공격성을 낮게 보는 문제가 있었다.
 - **속도대 히스테리시스:** 속도대는 경계를 ±3 km/h 넘어야 바뀐다 (예: URBAN → RURAL은 63 km/h 이상, RURAL → URBAN은 57 km/h 미만). 경계 근처를 오갈 때 창이 계속 비는 것을 막는다.
 - 차속이 5 km/h 미만인 구간은 C0-05~07 계산에서 뺀다 (주차장 조작 제외).
 - 표본 간격이 1초를 넘으면(신호 끊김) 그 구간은 미분하지 않는다.
@@ -397,60 +397,95 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 
 ---
 
-## 5. F3 — 피로 케어
+## 5. F3 — 피로 케어 (예방 · 감지 · 휴식 유도)
 
 ### 5.1 한 문장 요약
-장거리 주행에서 조향이 평소보다 무뎌지고 들쭉날쭉해지면 졸음 신호로 본다. 먼저 외기 유입과 시원한 바람으로 깨우고, 그래도 계속되면 다음 휴게소를 한마디로 제안한다.
+공조로 졸음을 "깨우지" 않는다. **졸음을 부르는 실내 공기를 미리 막고(예방), 운전자 자신도 모르는 졸음을 조향으로 잡아(감지), 실제로 쉬게 만든다(휴식 유도).** 공조의 찬 바람은 휴게소에 닿을 때까지 버티게 하는 보조 수단으로만 쓴다.
 
-### 5.2 상태 머신 (`FatiguePolicy`)
+### 5.2 근거와 설계 원칙 (자세한 근거는 `docs/research.md` 5절)
+
+| 근거 | 설계 원칙 |
+|---|---|
+| 찬 바람은 졸음에 일시적 효과뿐이다 (Reyner & Horne, 1998) | 공조를 졸음 해결 수단으로 내세우지 않는다. "휴게소까지 버티기" 용도로만 쓴다 |
+| 내기순환에서만 CO2가 문제 수준까지 쌓이며, 긴 주행·여러 명 탑승일수록 위험하다. 내기순환을 주기적으로 끊으라고 권고 (Hudda & Fruin, 2018). CO2 1,000ppm부터 의사결정 능력이 떨어진다 (Satish 외, 2012) | 졸음이 오기 **전에** 내기순환 시간을 관리한다 (① 예방) |
+| 스스로 졸음이 "낮다"고 할 때 75%는 실제로 중간 이상 졸렸다 (Gaspar & Carney, 2023) | 운전자의 자기 판단에 맡기지 않고 조향으로 객관적으로 잡는다 (② 감지, C0) |
+| 매우 졸리다고 스스로 답해도 75% 넘게 계속 운전했다 (Gaspar & Carney, 2023). 그냥 쉬기는 효과가 없고, 낮잠+카페인은 사고 행동을 9%로 줄였다 (Horne & Reyner, 1996; Reyner & Horne, 1997) | 경고로 끝내지 않는다. "응" 한마디면 경로 위 휴게소 입구 전에 다시 알려 줘서 쉬기로 결정하는 부담을 줄이고, 휴게소에서는 효과가 확인된 행동(커피·15분 낮잠)을 권한다 (③ 휴식 유도) |
+
+### 5.3 ① 예방 — 실내 공기 관리 (`FreshAirPolicy`)
+
+피로 점수와 상관없이 주행 내내 돈다. 무음이고 화면에도 띄우지 않는다. 기록만 남겨서 F4 리포트에 보여 준다.
+
+| ID | 요구사항 |
+|---|---|
+| F3-P1 | `registerHvacRecirculationState`로 내기순환 상태를 구독하고, 내기순환이 **연속으로 이어진 시간**을 잰다 |
+| F3-P2 | 탑승 인원을 `getCurrentSeatOccupancy`(좌석별)로 센다. 지원하지 않는 차량이면 운전자 1명으로 본다 (SAFE-04) |
+| F3-P3 | 내기순환이 기준 시간을 넘으면 외기로 바꾸고(`setHvacRecirculation(false)`), 5분 뒤 원래 상태(내기순환)로 되돌린다. 기준 시간: 1~2명 **30분**, 3명 이상 **15분** `[초기값]` |
+| F3-P4 | 차량에 CO2 센서 API가 없으므로 농도를 재지 않고 **추정 규칙**으로 동작한다. 기준 시간은 "1~2명의 평균 26분 통근에서는 내기순환이어도 2,500ppm을 넘지 않았다"는 Hudda & Fruin(2018)의 결과보다 보수적으로 잡았다. 에뮬레이터·실차에서 조정한다 |
+| F3-P5 | 운전자 우선 (SAFE-03): 앱이 외기로 바꾼 뒤 운전자가 다시 내기순환으로 바꾸면(예: 터널, 냄새) 이번 주행 동안 예방을 멈춘다 |
+| F3-P6 | F2와 동시에 동작할 수 있다. F2는 온도·풍량·풍향·통풍시트만, 예방은 내·외기만 다룬다. F2가 개입 중일 때 외기로 바꿔도 F2의 복원 값에는 내·외기가 없으므로 충돌하지 않는다 |
+| F3-P7 | 공조 전원이 꺼져 있거나 자동 내기순환(`AutoRecirculation`)이 켜져 있으면 차량 로직에 맡기고 개입하지 않는다 |
+
+### 5.4 ② 감지 + ③ 휴식 유도 — 상태 머신 (`FatiguePolicy`)
 
 ```
           피로≥60 60초 유지 & 연속 주행≥40분        10분 경과 & 피로≥60
- IDLE ──────────────────────────────▶ REFRESH ─────────────────────▶ SUGGEST
-  ▲                                     │ 피로<40 5분 유지             │
-  │                                     ▼                            ├─ "응" ──▶ WAYPOINT_ADDED ──▶ 정차하면 IDLE
+ IDLE ──────────────────────────────▶ HOLD_ON ─────────────────────▶ SUGGEST
+  ▲              (피로≥80이면 바로 SUGGEST)  │ 피로<40 5분 유지            │
+  │                                     ▼                            ├─ "응" ──▶ HEADING_TO_REST ──▶ 휴게소 P단 ──▶ REST_TIP
   └────────── 30분 잠금 ◀─────────── RESTORING                          ├─ "아니"/무응답 8초 ──▶ 30분 잠금
                                                                      └─ 피로<40 ──▶ RESTORING
 ```
 
 | 상태 | 동작 |
 |---|---|
-| `REFRESH` | 현재 설정 저장 → 외기 유입(`setHvacRecirculation(false)`) → 설정 온도 −1℃. F2와 같은 하한·운전자 우선 규칙을 적용 |
-| `SUGGEST` | TTS: "두 시간째 운전 중이에요. 12km 앞에 휴게소가 있어요. 들를까요?" → STT로 8초 동안 응답을 듣는다 |
-| `WAYPOINT_ADDED` | `NaviHelper.addWaypoint(RequestWaypointInfo)`로 휴게소를 경유지에 추가한다. TTS: "휴게소를 경유지로 넣었어요." |
+| `HOLD_ON` | **버티기.** 현재 설정 저장 → 외기 유입 → 얼굴 쪽 바람·설정 온도 −1℃. F2와 같은 하한·운전자 우선 규칙. 말하지 않는다 |
+| `SUGGEST` | TTS 한 문장: "12km 앞 ○○휴게소에서 잠깐 쉬어 갈까요?" → STT로 8초 동안 응답을 듣는다 |
+| `HEADING_TO_REST` | TTS: "좋아요, 입구 전에 알려 드릴게요." 휴게소 1km 전에 "곧 휴게소 입구예요." 공조는 도착할 때까지 `HOLD_ON` 상태를 유지한다. 수락한 휴게소를 지나치면 거절로 본다 |
+| `REST_TIP` | 휴게소에서 P단(정차 중)이 되면 TTS: "커피 한 잔이나 15분 낮잠이 졸음에 가장 잘 들어요." 공조는 복원한다 |
 
-### 5.3 요구사항
+### 5.5 요구사항
 
 | ID | 요구사항 |
 |---|---|
-| F3-01 | 연속 주행 시간이 40분 미만이면 피로 점수와 상관없이 개입하지 않는다 (짧은 주행에서 오탐 방지) |
-| F3-02 | F2와 F3가 동시에 조건을 만족하면 F2를 우선한다. 공조 제어는 한 번에 한 정책만 소유한다 (`HvacController`가 소유권 관리) |
+| F3-01 | 연속 주행 시간이 40분 미만이면 피로 점수와 상관없이 `HOLD_ON`·`SUGGEST`에 들어가지 않는다 (짧은 주행에서 오탐 방지). 예방(5.3)은 예외 |
+| F3-02 | F2와 `HOLD_ON`이 동시에 조건을 만족하면 F2를 우선한다. 온도·풍량은 한 번에 한 정책만 소유한다 (`HvacController`가 소유권 관리) |
 | F3-03 | 응답 인식: "응, 네, 그래, 좋아, 가자" → 수락. "아니, 괜찮아, 됐어" → 거절. 그 외나 무응답 → 거절로 처리. Gleo 연동이 승인되면 `ANSWER_REST_SUGGESTION`(4.8)으로도 응답을 받는다 |
-| F3-04 | 휴게소 정보: NaviHelper에 POI 검색 API가 있는지 확인이 필요하다. 없으면 문구를 "두 시간째 운전 중이에요. 다음 휴게소에서 쉬어 가세요."로 바꾸고 응답을 받지 않는다 |
+| F3-04 | **휴게소 정보:** NaviHelper 2.0.3에는 장소 검색 API가 없고, 회전 안내(TBT)에는 좌표가 없어 `addWaypoint`로 휴게소를 넣을 수 없다(SDK jar 확인). 대신 TBT의 `TURN_RESTAREA`·`TURN_ENTER_SERVICEAREA` 항목으로 **경로 위에 이미 있는 다음 휴게소**의 이름과 거리를 얻는다. 경로 안내 중이 아니거나 휴게소가 없으면 "다음 휴게소에서 잠깐 쉬어 가세요."로 권하기만 하고 응답은 받지 않는다 |
 | F3-05 | 내비 안내 음성과 겹치지 않도록, 다음 회전 안내(TBT)까지 500m 미만이면 제안을 미룬다 |
 | F3-06 | 제안은 한 주행에서 최대 3회까지만 한다 |
+| F3-07 | **피로≥80이 60초 유지되면 `HOLD_ON`을 건너뛰고 바로 제안한다.** 찬 바람의 효과는 일시적이므로 매우 졸릴 때 10분을 기다리지 않는다 |
+| F3-08 | 거절하면 30분 동안 다시 제안하지 않지만, `HOLD_ON`의 공조는 피로가 내려갈 때까지 유지한다 |
+| F3-09 | `REST_TIP`은 수락한 휴게소로 가던 중(`HEADING_TO_REST`) P단이 됐을 때 한 번만 말한다. 정차 중이므로 SAFE-02의 길이 제한 안에서 두 문장까지 허용한다 |
 
-### 5.4 사용 API
+### 5.6 사용 API
 
 | 동작 | API | 권한 |
 |---|---|---|
+| 내기순환 상태 구독·조회 | `HVAC.registerHvacRecirculationState(SeatArea, HvacRecirculationStateListener)`, `getHvacRecirculationState`, `getHvacAutoRecirculationState` | `CAR_CLIMATE` |
 | 외기 전환 | `HVAC.setHvacRecirculation(SeatArea, Boolean, …)` | `CONTROL_CAR_CLIMATE` |
+| 탑승 인원 | `Seat.checkSeatOccupancyCapabilities`, `getCurrentSeatOccupancy(SeatArea, …)`, `registerSeatOccupancy` | `CAR_SEATS` |
 | 음성 합성 | `ai.pleos.playground:TextToSpeech:3.3.1` — `TextToSpeech(context, Mode.ON_DEVICE)`, `initialize`, `speak`, `stop`, `release` | `pleos.car.permission.TTS_SERVICE` |
 | 음성 인식 | `ai.pleos.playground:SpeechToText:3.3.1` — `SpeechToText(context, Mode.ON_DEVICE)`, `request`, `stop`, `release` | `pleos.car.permission.STT_SERVICE` |
-| 경유지 추가 | `NaviHelper.addWaypoint(RequestWaypointInfo)` | `NAVI_ROUTE` 계열 (정확한 권한 확인 필요) |
+| 다음 휴게소·회전 거리 | `NaviHelper.getTBTInfo()` → `NaviHelperEventListener.onTBTInfo(List<TBTInfo>)` (`TurnType`, `distance`, `description`) | `NAVI_ROUTE` 계열 (정확한 권한 확인 필요) |
 
-**음성 모드:** `ON_DEVICE`를 쓴다. 네트워크가 필요 없고, 앱 등록(My Project 자격 증명)도 필요 없다.
+**참고:** SDK의 `HvacRecirculationStateListener` 콜백 이름은 `onHvacAutoRecirculationStateUpdated`이고, 일반·자동 내기순환 구독에 같은 리스너를 쓴다 (SDK jar 확인).
 
-### 5.5 수용 기준
+### 5.7 수용 기준
 
 | ID | 시나리오 | 기대 결과 |
 |---|---|---|
-| F3-T1 | 연속 주행 50분, 피로 점수 65가 60초 유지 | 외기 유입, 온도 −1℃ |
-| F3-T2 | 이어서 10분 동안 피로 점수 65 유지 | 휴게소 제안 음성 |
-| F3-T3 | "응" | 경유지 추가 |
-| F3-T4 | 무응답 8초 | 30분 동안 제안 없음 |
+| F3-T1 | 연속 주행 50분, 피로 점수 65가 60초 유지 | `HOLD_ON`: 외기 유입, 얼굴 쪽 바람, 온도 −1℃. 음성 없음 |
+| F3-T2 | 이어서 10분 동안 피로 점수 65 유지 | 휴게소 제안 한 문장 |
+| F3-T3 | "응" | 수락 안내, 휴게소 1km 전 입구 알림, 도착할 때까지 공조 유지 |
+| F3-T4 | 무응답 8초 | 30분 동안 제안 없음, 공조는 유지 |
 | F3-T5 | 연속 주행 20분, 피로 점수 80 | 개입 없음 |
-| F3-T6 | F2 STAGE1 진행 중에 피로 조건 충족 | F3 개입 없음 (F2 우선) |
+| F3-T6 | F2 STAGE1 진행 중에 피로 조건 충족 | `HOLD_ON` 없음 (F2 우선). 예방(5.3)은 그대로 동작 |
+| F3-T7 | 연속 주행 50분, 피로 점수 85가 60초 유지 | `HOLD_ON` 없이 바로 제안 (F3-07) |
+| F3-T8 | 수락한 휴게소에서 P단 | "커피 한 잔이나 15분 낮잠…" 안내, 공조 복원 |
+| F3-T9 | 운전자 1명, 내기순환 30분 연속 | 외기 5분 → 내기순환 복귀 |
+| F3-T10 | 탑승 3명, 내기순환 15분 연속 | 외기 5분 → 내기순환 복귀 |
+| F3-T11 | 앱이 외기로 바꾼 뒤 운전자가 내기순환으로 되돌림 | 이번 주행 동안 예방 중지 |
+| F3-T12 | 자동 내기순환이 켜진 차량 | 예방 개입 없음 |
 
 ---
 
@@ -518,7 +553,7 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 @Entity data class InterventionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val tripId: Long, val startMs: Long, val endMs: Long?,
-    val kind: String,      // COOLDOWN / FATIGUE_REFRESH / FATIGUE_SUGGEST
+    val kind: String,      // COOLDOWN / FRESH_AIR / FATIGUE_HOLD_ON / FATIGUE_SUGGEST
     val maxStage: Int, val outcome: String,   // RESTORED / YIELDED / ACCEPTED / DECLINED ...
 )
 @Entity data class BaselineEntity(
@@ -583,6 +618,26 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 | 대시보드·결과·기록·설정 화면 | **폐기.** `docs/screen-spec.md`대로 새로 만든다 | 11/9 |
 | `shared` 모듈의 `MyMusicService` (템플릿 잔재, `appCategory="audio"` 미디어 서비스로 등록됨) | automotive에서 `shared` 의존성 제거. 그래야 앱이 미디어 앱으로 병합되지 않음 | 11/3 완료 |
 
+## 11.5 에뮬레이터 확인 결과 (2026-11-05, Pleos_Connect_v2.0)
+
+| 항목 | 결과 |
+|---|---|
+| 포그라운드 서비스, Vehicle·HVAC·Seat·NaviHelper·TTS·STT 초기화 | 정상 |
+| 외기온 `ENV_OUTSIDE_TEMPERATURE` | 25.0℃ → `SUMMER` |
+| F2 1단계 | 30초 유지 후 설정 온도 24 → 23℃, TTS "조금 시원하게 해 드릴게요", 3초 뒤 STT 응답창 |
+| F2 2단계 | 2분 뒤 22℃, 통풍시트 0 → 1 |
+| Gleo `ADJUST_CABIN_COMFORT(cold)` | 0.5초 안에 24℃·통풍 0 복원, `COLD_FEEDBACK`, `success` 응답 → Gleo가 응답 TTS 단계로 진행 |
+| 주행 종료·저장 | P 60초 뒤 종료, Room에 `SUMMER` 강도 3 → 2, 기준 온도 24℃, 기준선 1회·11.5분 저장 |
+
+**확인 중 발견해 고친 것:** 속성별 VHAL 영역(풍량·풍향 0x5, 전원·내기순환 0x75), 지원 범위 확인을 순차·시간 제한으로, 구독 뒤 현재 값 읽기, SDK 숫자가 Double로 와서 생긴 크래시, 속도대가 바뀔 때 특징 창이 지워지던 문제, TTS `onDone`이 오지 않아 STT가 늦게 열리던 문제.
+
+**에뮬레이터 한계·특이 사항:**
+- Pleos가 풍량 단계 목록과 풍향 지원 목록을 빈 값으로 준다 → 이 에뮬레이터에서는 풍량 +1, 얼굴 쪽 풍향이 동작하지 않는다 (VHAL 자체는 풍량 1~8)
+- VHAL 차속·기어 주입(`inject-vhal-event`)은 곧바로 덮어써진다 → 디버그 빌드의 시나리오 재생(`--es scenario`)이나 Virtual Console을 쓴다
+- 앱은 운전자 프로필(Android 사용자 10)로 돈다. `adb` broadcast는 `--user current`가 필요하다 (F2-24의 프로필별 분리와 일치)
+- 서버에 스키마가 등록되지 않은 상태에서 Gleo Action을 `adb`로 보내면, Gleo가 응답 생성 서버 요청에서 `HTTP 404`로 죽는다 (Gleo 앱 쪽 문제, 문의 필요)
+- TBT는 경로 안내 중에만 와서 휴게소 판정은 F1 경로 연동 때 확인한다
+
 ## 12. 미확인 항목
 
 | 항목 | 영향 | 확인 방법 | 대안 |
@@ -597,5 +652,6 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 | TTS 직후 STT 자동 시작 시 차량 UI·알림음 | F2-11 | 에뮬레이터 실험 | 응답창 없이 경로 ①·③만 사용 |
 | 에뮬레이터·차량의 `ENV_OUTSIDE_TEMPERATURE` 제공 여부 | F2-19 | 에뮬레이터 `cmd car_service get-property-value` | 달로 판단 |
 | 풍향·통풍시트 제어 권한 | 4.7.1 (겨울·여름 수단) | SDK jar 권한 어노테이션, 문서 | 해당 수단 없이 온도·풍량만 |
+| 실내 공기 예방(F3-P3)의 기준 시간 15분·30분 | F3 예방 | 차량에 CO2 센서 API가 없어 추정 규칙으로 둠. 에뮬레이터 모의 주행·실차로 조정 | 기준 시간을 보수적으로 유지 |
 | Pleos 운전자 프로필 = Android 사용자 1:1 여부 | F2-24 (운전자별 학습) | 에뮬레이터에서 프로필 전환 후 `am get-current-user` | 프로필 구분 없이 학습 (한계로 명시) |
 | 차량 화면 해상도별 레이아웃·타이포그래피 토큰 | 화면 명세 | Pleos 디자인 가이드 | 14.6 기준 단일 레이아웃 |
