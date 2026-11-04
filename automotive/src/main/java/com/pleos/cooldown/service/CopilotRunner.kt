@@ -99,6 +99,7 @@ class CopilotRunner(
         hvac.start()
         restAreas.start()
         rootJob = scope.launch {
+            hvac.prepare()
             val e = PatternEngine(storage.loadBaseline(), scorer)
             engine = e
             comfort = storage.loadComfort()

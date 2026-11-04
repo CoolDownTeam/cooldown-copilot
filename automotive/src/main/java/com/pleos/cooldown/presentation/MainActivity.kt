@@ -1,8 +1,10 @@
 package com.pleos.cooldown.presentation
 
 import android.Manifest
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -28,6 +30,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        useScenarioIfRequested()
         enableEdgeToEdge()
         requestPermissionsAndStart()
         setContent {
@@ -37,6 +40,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /** 디버그 빌드에서만: `adb shell am start ... --es scenario f2_aggressive` */
+    private fun useScenarioIfRequested() {
+        val name = intent.getStringExtra(EXTRA_SCENARIO) ?: return
+        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
+        val used = (application as CooldownApplication).container.useScenario(name)
+        Log.i(TAG, "scenario $name used=$used")
     }
 
     private fun requestPermissionsAndStart() {
@@ -49,6 +60,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
+        const val TAG = "MainActivity"
+        const val EXTRA_SCENARIO = "scenario"
         val RUNTIME_PERMISSIONS = listOf(
             PleosVehicleDataSource.CAR_SPEED_PERMISSION,
             OutsideTemperatureSource.PERMISSION,

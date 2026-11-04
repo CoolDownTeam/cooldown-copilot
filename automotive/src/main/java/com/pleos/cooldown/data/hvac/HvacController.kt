@@ -21,6 +21,9 @@ interface HvacController {
     fun start()
     fun stop()
 
+    /** 지원 범위를 확인하고 값 구독을 건다. [start] 뒤, 첫 주행 전에 한 번 부른다 */
+    suspend fun prepare() = Unit
+
     /** SAFE-04: 지원 범위. 온도·풍량을 지원하지 않으면 null */
     suspend fun limits(): HvacLimits?
 

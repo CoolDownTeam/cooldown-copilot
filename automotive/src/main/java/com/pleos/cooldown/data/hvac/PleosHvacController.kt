@@ -4,6 +4,7 @@ import ai.pleos.playground.vehicle.Vehicle
 import ai.pleos.playground.vehicle.api.HVAC
 import ai.pleos.playground.vehicle.api.Seat
 import ai.pleos.playground.vehicle.api.model.area.SeatArea
+import ai.pleos.playground.vehicle.api.model.capability.AreaBounds
 import ai.pleos.playground.vehicle.constant.area.SeatValue
 import ai.pleos.playground.vehicle.constant.control.FanDirectionType
 import ai.pleos.playground.vehicle.constant.unit.TemperatureUnit
@@ -29,10 +30,15 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
 /**
- * Pleos Vehicle SDK 공조 구현. 운전석(`ROW_1_LEFT`)만 다룬다 (F2-05, 좌핸들 기준).
+ * Pleos Vehicle SDK 공조 구현. 운전석(`ROW_1_LEFT`)이 들어 있는 영역만 다룬다 (F2-05, 좌핸들 기준).
+ *
+ * 속성마다 영역이 다르다. 에뮬레이터 VHAL 기준으로 설정 온도·시트 통풍은 운전석(0x1),
+ * 풍량·풍향은 앞줄(0x5), 전원·내기순환은 전체(0x75)다. 그래서 고정 영역을 쓰지 않고
+ * `checkXXXCapabilities` 결과에서 운전석이 들어 있는 영역을 골라 쓴다 (SAFE-04).
  *
  * 권한: 조회 `CAR_CLIMATE`·`CAR_SEATS`, 변경 `CONTROL_CAR_CLIMATE`·`CONTROL_CAR_SEATS` (SDK의 @RequiresPermission).
  * 제어 권한은 Pleos App Market 사전 승인이 필요하다.
@@ -43,7 +49,13 @@ class PleosHvacController(
 ) : HvacController {
 
     private val appContext = context.applicationContext
-    private val driverSeat = SeatArea(SeatValue.ROW_1_LEFT)
+    @Volatile private var temperatureArea: SeatArea? = null
+    @Volatile private var fanSpeedArea: SeatArea? = null
+    @Volatile private var fanDirectionArea: SeatArea? = null
+    @Volatile private var powerArea: SeatArea? = null
+    @Volatile private var recirculationArea: SeatArea? = null
+    @Volatile private var autoRecirculationArea: SeatArea? = null
+    @Volatile private var seatVentilationArea: SeatArea? = null
     private val detector = ManualChangeDetector()
 
     private val _snapshot = MutableStateFlow<HvacSnapshot?>(null)
@@ -125,36 +137,85 @@ class PleosHvacController(
         try {
             val v = Vehicle(appContext)
             v.initialize()
-            v.getHVAC().apply {
-                registerHvacTemperature(driverSeat, temperatureListener)
-                registerHvacFanSpeed(driverSeat, fanSpeedListener)
-                registerHvacPowerState(driverSeat, powerListener)
-                registerHvacRecirculationState(driverSeat, recirculationListener)
-                registerHvacAutoRecirculationState(driverSeat, autoRecirculationListener)
-                // 풍향은 변경 리스너가 없어서 시작할 때 한 번 읽는다
-                getHvacFanDirection(driverSeat, { type ->
-                    fanDirection = type?.toDomain()
-                    publish()
-                }, { e -> logFailure("fan direction", e) })
-            }
-            v.getSeat().registerHvacSeatVentilation(driverSeat, seatVentilationListener)
             vehicle = v
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start HVAC", e)
         }
     }
 
+    /**
+     * 지원 범위를 하나씩 확인한다. 에뮬레이터에서 여러 확인을 한꺼번에 보내면 일부가 응답하지 않아서
+     * 순서대로, 각각 시간 제한을 두고 보낸다.
+     */
+    override suspend fun prepare() {
+        val v = vehicle ?: return
+        val hvac = v.getHVAC()
+        request<Map<SeatArea, AreaBounds<*>>>("temperature") { ok, fail -> hvac.checkHvacTemperatureCapabilities(ok, fail) }
+            ?.keys?.driverArea()?.let { a -> temperatureArea = a; hvac.registerHvacTemperature(a, temperatureListener) }
+        request<Map<SeatArea, List<*>>>("fan speed") { ok, fail -> hvac.checkHvacFanSpeedCapabilities(ok, fail) }
+            ?.keys?.driverArea()?.let { a -> fanSpeedArea = a; hvac.registerHvacFanSpeed(a, fanSpeedListener) }
+        val power = request<List<SeatArea>>("power") { ok, fail -> hvac.checkHvacPowerCapabilities(ok, fail) }?.driverArea()
+        if (power == null) {
+            // 전원을 따로 끌 수 없는(또는 확인되지 않는) 차량이면 늘 켜져 있는 것으로 본다
+            powerOn = true
+            publish()
+        } else {
+            powerArea = power
+            hvac.registerHvacPowerState(power, powerListener)
+        }
+        request<List<SeatArea>>("recirculation") { ok, fail -> hvac.checkHvacRecirculationCapabilities(ok, fail) }
+            ?.driverArea()?.let { a -> recirculationArea = a; hvac.registerHvacRecirculationState(a, recirculationListener) }
+        request<List<SeatArea>>("auto recirculation") { ok, fail -> hvac.checkHvacAutoRecirculationCapabilities(ok, fail) }
+            ?.driverArea()?.let { a -> autoRecirculationArea = a; hvac.registerHvacAutoRecirculationState(a, autoRecirculationListener) }
+        request<Map<SeatArea, List<FanDirectionType>>>("fan direction") { ok, fail -> hvac.checkHvacFanDirectionCapabilities(ok, fail) }
+            ?.keys?.driverArea()?.let { a ->
+                fanDirectionArea = a
+                // 풍향은 변경 리스너가 없어서 한 번 읽는다
+                fanDirection = request<FanDirectionType?>("fan direction value") { ok, fail -> hvac.getHvacFanDirection(a, ok, fail) }?.toDomain()
+                publish()
+            }
+        request<Map<SeatArea, AreaBounds<*>>>("seat ventilation") { ok, fail -> v.getSeat().checkSeatVentilationCapabilities(ok, fail) }
+            ?.keys?.driverArea()?.let { a -> seatVentilationArea = a; v.getSeat().registerHvacSeatVentilation(a, seatVentilationListener) }
+        readCurrentValues(v)
+    }
+
+    /** 구독만으로는 현재 값이 오지 않아서(에뮬레이터 확인) 한 번씩 읽어 둔다 */
+    private suspend fun readCurrentValues(v: Vehicle) {
+        val hvac = v.getHVAC()
+        temperatureArea?.let { a ->
+            request<Float?>("temperature value") { ok, fail -> hvac.getHvacTemperature(a, TemperatureUnit.CELSIUS, ok, fail) }
+                ?.let { temperature = it; detector.onTemperature(clock.nowMs(), it) }
+        }
+        fanSpeedArea?.let { a ->
+            request<Int?>("fan speed value") { ok, fail -> hvac.getHvacFanSpeed(a, ok, fail) }
+                ?.let { fanSpeed = it; detector.onFanSpeed(clock.nowMs(), it) }
+        }
+        powerArea?.let { a -> request<Boolean?>("power value") { ok, fail -> hvac.getHvacPowerState(a, ok, fail) }?.let { powerOn = it } }
+        recirculationArea?.let { a ->
+            request<Boolean?>("recirculation value") { ok, fail -> hvac.getHvacRecirculationState(a, ok, fail) }
+                ?.let { recirculation = it; detector.onRecirculation(clock.nowMs(), it) }
+        }
+        autoRecirculationArea?.let { a ->
+            request<Boolean?>("auto recirculation value") { ok, fail -> hvac.getHvacAutoRecirculationState(a, ok, fail) }?.let { autoRecirculation = it }
+        }
+        seatVentilationArea?.let { a ->
+            request<Int?>("seat ventilation value") { ok, fail -> v.getSeat().getHvacSeatVentilationState(a, ok, fail) }
+                ?.let { seatVentilation = it; detector.onSeatVentilation(clock.nowMs(), it) }
+        }
+        publish()
+    }
+
     override fun stop() {
         val v = vehicle ?: return
         try {
             v.getHVAC().apply {
-                unregisterHvacTemperature(driverSeat, temperatureListener)
-                unregisterHvacFanSpeed(driverSeat, fanSpeedListener)
-                unregisterHvacPowerState(driverSeat, powerListener)
-                unregisterHvacRecirculationState(driverSeat, recirculationListener)
-                unregisterHvacAutoRecirculationState(driverSeat, autoRecirculationListener)
+                temperatureArea?.let { unregisterHvacTemperature(it, temperatureListener) }
+                fanSpeedArea?.let { unregisterHvacFanSpeed(it, fanSpeedListener) }
+                powerArea?.let { unregisterHvacPowerState(it, powerListener) }
+                recirculationArea?.let { unregisterHvacRecirculationState(it, recirculationListener) }
+                autoRecirculationArea?.let { unregisterHvacAutoRecirculationState(it, autoRecirculationListener) }
             }
-            v.getSeat().unregisterHvacSeatVentilation(driverSeat, seatVentilationListener)
+            seatVentilationArea?.let { v.getSeat().unregisterHvacSeatVentilation(it, seatVentilationListener) }
             v.release()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to stop HVAC", e)
@@ -165,22 +226,29 @@ class PleosHvacController(
     override suspend fun limits(): HvacLimits? {
         val v = vehicle ?: return null
         val hvac = v.getHVAC()
-        val temp = request<Map<SeatArea, ai.pleos.playground.vehicle.api.model.capability.AreaBounds<Float>>> { ok, fail ->
+        // SDK의 제네릭 타입은 런타임에 지워져서 실제로는 Double이 들어온다 (에뮬레이터에서 ClassCastException 확인).
+        // 그래서 숫자는 모두 Number로 받아 변환한다
+        val temp = request<Map<SeatArea, AreaBounds<*>>>("temperature limits") { ok, fail ->
             hvac.checkHvacTemperatureCapabilities(ok, fail)
-        }?.driverValue() ?: return null
-        val fanMax = request<Map<SeatArea, List<Int>>> { ok, fail ->
+        }?.driverValue()
+        val fanSpeeds = request<Map<SeatArea, List<*>>>("fan speed limits") { ok, fail ->
             hvac.checkHvacFanSpeedCapabilities(ok, fail)
-        }?.driverValue()?.maxOrNull() ?: return null
-        val directions = request<Map<SeatArea, List<FanDirectionType>>> { ok, fail ->
+        }?.driverValue()?.mapNotNull { (it as? Number)?.toInt() }
+        val directions = request<Map<SeatArea, List<FanDirectionType>>>("fan direction limits") { ok, fail ->
             hvac.checkHvacFanDirectionCapabilities(ok, fail)
         }?.driverValue().orEmpty()
-        val seatMax = request<Map<SeatArea, ai.pleos.playground.vehicle.api.model.capability.AreaBounds<Int>>> { ok, fail ->
+        val seatMax = request<Map<SeatArea, AreaBounds<*>>>("seat ventilation limits") { ok, fail ->
             v.getSeat().checkSeatVentilationCapabilities(ok, fail)
-        }?.driverValue()?.maxValue
+        }?.driverValue()?.maxValue.asNumber()?.toInt()
+        val minTemp = temp?.minValue.asNumber()?.toFloat()
+        val maxTemp = temp?.maxValue.asNumber()?.toFloat()
+        Log.d(TAG, "limits temp=$minTemp~$maxTemp fan=$fanSpeeds directions=$directions seat=$seatMax")
+        if (minTemp == null || maxTemp == null) return null
         return HvacLimits(
-            minTempC = temp.minValue,
-            maxTempC = temp.maxValue,
-            maxFanSpeed = fanMax,
+            minTempC = minTemp,
+            maxTempC = maxTemp,
+            // 풍량 단계 목록을 주지 않는 차량도 있어서, 없으면 현재 값보다 올리지 않는다
+            maxFanSpeed = fanSpeeds?.maxOrNull() ?: (fanSpeed ?: 1),
             supportsFaceDirection = FanDirectionType.FACE in directions,
             maxSeatVentilation = seatMax?.takeIf { it > 0 },
         )
@@ -191,39 +259,44 @@ class PleosHvacController(
         val hvac = v.getHVAC()
         detector.onAppSet(clock.nowMs(), target)
         val current = _snapshot.value
-        if (current?.temperatureC != target.temperatureC &&
-            !set { ok, fail -> hvac.setHvacTemperature(driverSeat, target.temperatureC, TemperatureUnit.CELSIUS, { _, _ -> ok() }, fail) }
-        ) return false
-        if (current?.fanSpeed != target.fanSpeed &&
-            !set { ok, fail -> hvac.setHvacFanSpeed(driverSeat, target.fanSpeed, { _, _ -> ok() }, fail) }
-        ) return false
+        if (current?.temperatureC != target.temperatureC) {
+            val area = temperatureArea ?: return false
+            if (!set { ok, fail -> hvac.setHvacTemperature(area, target.temperatureC, TemperatureUnit.CELSIUS, { _, _ -> ok() }, fail) }) return false
+        }
+        if (current?.fanSpeed != target.fanSpeed) {
+            val area = fanSpeedArea ?: return false
+            if (!set { ok, fail -> hvac.setHvacFanSpeed(area, target.fanSpeed, { _, _ -> ok() }, fail) }) return false
+        }
         val direction = target.fanDirection
-        if (direction != null && direction != current?.fanDirection) {
-            if (!set { ok, fail -> hvac.setHvacFanDirection(driverSeat, direction.toSdk(), { _, _ -> ok() }, fail) }) return false
+        val directionArea = fanDirectionArea
+        if (direction != null && direction != current?.fanDirection && directionArea != null) {
+            if (!set { ok, fail -> hvac.setHvacFanDirection(directionArea, direction.toSdk(), { _, _ -> ok() }, fail) }) return false
             fanDirection = direction
             publish()
         }
         val seat = target.seatVentilation
-        if (seat != null && seat != current?.seatVentilation &&
-            !set { ok, fail -> v.getSeat().setHvacSeatVentilation(driverSeat, seat, { _, _ -> ok() }, fail) }
+        val seatArea = seatVentilationArea
+        if (seat != null && seat != current?.seatVentilation && seatArea != null &&
+            !set { ok, fail -> v.getSeat().setHvacSeatVentilation(seatArea, seat, { _, _ -> ok() }, fail) }
         ) return false
         return true
     }
 
     override suspend fun setRecirculation(on: Boolean): Boolean {
         val v = vehicle ?: return false
+        val area = recirculationArea ?: return false
         detector.onAppSetRecirculation(clock.nowMs(), on)
-        return set { ok, fail -> v.getHVAC().setHvacRecirculation(driverSeat, on, { _, _ -> ok() }, fail) }
+        return set { ok, fail -> v.getHVAC().setHvacRecirculation(area, on, { _, _ -> ok() }, fail) }
     }
 
     /** 착석 감지를 지원하는 좌석마다 물어서 센다. 권한: `CAR_SEATS` */
     override suspend fun occupantCount(): Int? {
         val seat = vehicle?.getSeat() ?: return null
-        val areas = request<List<SeatArea>> { ok, fail -> seat.checkSeatOccupancyCapabilities(ok, fail) }
+        val areas = request<List<SeatArea>>("occupancy") { ok, fail -> seat.checkSeatOccupancyCapabilities(ok, fail) }
             ?.takeIf { it.isNotEmpty() } ?: return null
         var count = 0
         for (area in areas) {
-            val occupied = request<Boolean?> { ok, fail -> seat.getCurrentSeatOccupancy(area, ok, fail) }
+            val occupied = request<Boolean?>("occupancy value") { ok, fail -> seat.getCurrentSeatOccupancy(area, ok, fail) }
             if (occupied == true) count++
         }
         // 운전자 좌석 감지가 없어도 운전자는 있다
@@ -234,25 +307,41 @@ class PleosHvacController(
         val t = temperature ?: return
         val f = fanSpeed ?: return
         val p = powerOn ?: return
-        _snapshot.update { HvacSnapshot(t, f, p, fanDirection, seatVentilation, recirculation, autoRecirculation) }
+        val next = HvacSnapshot(t, f, p, fanDirection, seatVentilation, recirculation, autoRecirculation)
+        if (_snapshot.value != next) Log.d(TAG, "snapshot $next")
+        _snapshot.update { next }
     }
 
     /** 운전석 값을 고른다. 키가 정확히 같지 않을 수 있어 좌석 값으로 찾는다 */
     private fun <T> Map<SeatArea, T>.driverValue(): T? =
         entries.firstOrNull { (area, _) -> SeatValue.ROW_1_LEFT in area.values }?.value
 
-    private suspend fun <T> request(call: (onComplete: (T) -> Unit, onFailed: (Exception) -> Unit) -> Unit): T? =
-        suspendCancellableCoroutine { cont ->
+    private fun Any?.asNumber(): Number? = this as? Number
+
+    /** 운전석이 들어 있는 영역 (예: 앞줄 0x5, 전체 0x75) */
+    private fun Collection<SeatArea>.driverArea(): SeatArea? {
+        val area = firstOrNull { SeatValue.ROW_1_LEFT in it.values }
+        Log.d(TAG, "capability areas=${map { it.values.toList() }} → driver=${area?.values?.toList()}")
+        return area
+    }
+
+    /** 콜백 API를 기다린다. 실패하거나 [REQUEST_TIMEOUT_MS] 안에 답이 없으면 null */
+    private suspend fun <T> request(
+        what: String = "request",
+        call: (onComplete: (T) -> Unit, onFailed: (Exception) -> Unit) -> Unit,
+    ): T? = withTimeoutOrNull(REQUEST_TIMEOUT_MS) {
+        suspendCancellableCoroutine<T?> { cont ->
             try {
                 call({ if (cont.isActive) cont.resume(it) }, { e ->
-                    logFailure("capability", e)
+                    logFailure(what, e)
                     if (cont.isActive) cont.resume(null)
                 })
             } catch (e: Exception) {
-                logFailure("capability", e)
+                logFailure(what, e)
                 if (cont.isActive) cont.resume(null)
             }
         }
+    }.also { if (it == null) Log.w(TAG, "HVAC $what: no result") }
 
     private suspend fun set(call: (onDone: () -> Unit, onFailed: (Exception) -> Unit) -> Unit): Boolean =
         suspendCancellableCoroutine { cont ->
@@ -285,5 +374,6 @@ class PleosHvacController(
 
     private companion object {
         const val TAG = "PleosHvac"
+        const val REQUEST_TIMEOUT_MS = 3_000L
     }
 }
