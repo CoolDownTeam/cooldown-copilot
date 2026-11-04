@@ -527,7 +527,16 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 | F1-02 | 재탐색(`onReRouteEnded`) 후에는 어려운 구간을 다시 계산하되, 브리핑은 다시 재생하지 않는다 |
 | F1-03 | 내비 안내 음성과 겹치면 내비를 우선한다 |
 | F1-04 | `onTBTInfo`가 경로 전체가 아니라 다음 몇 개 회전만 준다면, 브리핑은 "다음 구간" 범위로 줄이고 직전 안내를 중심으로 동작한다 (구현 첫날 확인) |
-| F1-05 | 설정에서 F1을 끌 수 있다 |
+| F1-05 | 설정에서 F1을 끌 수 있다 (설정 화면 작업 때 연결) |
+
+### 6.5 구현 메모 (2026-11-05)
+
+- 경로·TBT·정체는 `PleosRouteSource` 하나로 모아 F1과 F3(휴게소·다음 회전 거리)가 함께 쓴다.
+- 정체는 `RouteStateInfo.trafficStatus.congestionItemList`의 `offset`(시작 지점), `distance`(길이), `trafficCongestionType`(`SLOW`·`HEAVY`)을 쓴다. `offset`이 현재 위치 기준인지 경로 시작 기준인지는 확인 필요.
+- `RouteInfo` 생성자는 **경도가 먼저**다 (SDK jar 필드 순서 `longitude, latitude`).
+- 경로마다 `onRouteStarted`로 새 경로 ID를 정하고, 재탐색(`onReRouteEnded`)은 같은 경로로 본다 (F1-02).
+- 직전 안내는 다른 회전이 300m 안에 있으면 미룬다 (F1-03을 내비 음성 겹침 대신 거리로 어림).
+- **에뮬레이터 확인 막힘:** 경로 요청은 내비 앱까지 정상 전달되지만, Pleos 경로 서버(`connect-gw.umos.ai/.../route/find-route`)가 `500 "fail to get odd policy … Unavailable"`을 돌려줘 경로가 만들어지지 않는다. 그래서 TBT 범위(F1-04)·거리 단위·정체 `offset`·휴게소 판정은 서버가 정상일 때 다시 확인한다.
 
 ---
 

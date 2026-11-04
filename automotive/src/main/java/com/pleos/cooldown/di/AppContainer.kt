@@ -8,7 +8,7 @@ import com.pleos.cooldown.data.hvac.PleosHvacController
 import com.pleos.cooldown.data.local.BaselineRepository
 import com.pleos.cooldown.data.local.ComfortProfileRepository
 import com.pleos.cooldown.data.local.CopilotDatabase
-import com.pleos.cooldown.data.navi.PleosRestAreaSource
+import com.pleos.cooldown.data.navi.PleosRouteSource
 import com.pleos.cooldown.data.vehicle.FakeVehicleDataSource
 import com.pleos.cooldown.data.vehicle.PleosVehicleDataSource
 import com.pleos.cooldown.data.vehicle.ScenarioParser
@@ -75,6 +75,9 @@ class AppContainer(context: Context) {
 
     private val outsideTemperature = OutsideTemperatureSource(appContext)
 
+    /** F1·F3가 함께 쓰는 내비 경로 */
+    val routeSource: PleosRouteSource by lazy { PleosRouteSource(appContext) }
+
     /** 모든 주행 상태를 바꾸는 단일 스레드 (CopilotRunner 규칙) */
     private val runnerScope: CoroutineScope by lazy {
         CoroutineScope(SupervisorJob() + Executors.newSingleThreadExecutor().asCoroutineDispatcher())
@@ -97,7 +100,7 @@ class AppContainer(context: Context) {
             season = { SeasonBand.of(outsideTemperature.readCelsius(), LocalDate.now().monthValue) },
             voiceOut = PleosVoiceOutput(appContext),
             voiceIn = PleosVoiceInput(appContext),
-            restAreas = PleosRestAreaSource(appContext),
+            routes = routeSource,
         )
     }
 

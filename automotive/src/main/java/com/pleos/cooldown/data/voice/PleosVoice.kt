@@ -69,6 +69,11 @@ class PleosVoiceOutput(context: Context) : VoiceOutput {
         withTimeoutOrNull(estimatedDurationMs(text)) { done.await() }
     }
 
+    override fun stop() {
+        runCatching { tts.stop() }
+        finish()
+    }
+
     fun release() {
         tts.removeEventListener(listener)
         tts.release()
@@ -78,7 +83,7 @@ class PleosVoiceOutput(context: Context) : VoiceOutput {
         finished?.complete(Unit)
     }
 
-    /** 한국어 TTS는 초당 6~7음절 안팎이다. 여유 1초를 더하고, 최대 6초까지만 기다린다 */
+    /** 한국어 TTS는 초당 6~7음절 안팎이다. 여유 1초를 더하고, 최대 35초(코스 브리핑 30초)까지만 기다린다 */
     private fun estimatedDurationMs(text: String): Long =
         (text.count { !it.isWhitespace() } * MS_PER_CHAR + MARGIN_MS).coerceAtMost(MAX_SPEAK_WAIT_MS)
 
@@ -87,7 +92,7 @@ class PleosVoiceOutput(context: Context) : VoiceOutput {
         const val READY_TIMEOUT_MS = 3_000L
         const val MS_PER_CHAR = 180L
         const val MARGIN_MS = 1_000L
-        const val MAX_SPEAK_WAIT_MS = 6_000L
+        const val MAX_SPEAK_WAIT_MS = 35_000L
     }
 }
 

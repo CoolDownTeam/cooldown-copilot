@@ -2,10 +2,14 @@ package com.pleos.cooldown.service
 
 import android.util.Log
 import com.pleos.cooldown.data.hvac.HvacController
-import com.pleos.cooldown.data.navi.RestAreaSource
+import com.pleos.cooldown.data.navi.RouteSource
+import com.pleos.cooldown.data.navi.nextRestArea
+import com.pleos.cooldown.data.navi.nextTurnDistanceM
 import com.pleos.cooldown.data.vehicle.VehicleDataSource
 import com.pleos.cooldown.data.voice.VoiceInput
 import com.pleos.cooldown.data.voice.VoiceOutput
+import com.pleos.cooldown.domain.briefing.BriefingAction
+import com.pleos.cooldown.domain.briefing.BriefingPolicy
 import com.pleos.cooldown.domain.cooldown.ComfortLearner
 import com.pleos.cooldown.domain.cooldown.ComfortProfile
 import com.pleos.cooldown.domain.cooldown.CooldownAction
@@ -45,7 +49,7 @@ interface CopilotStorage {
 }
 
 /**
- * 주행 한 번을 처음부터 끝까지 돌린다: 주행 감지 → C0 엔진 → F2·F3 정책 → 공조·음성 실행 → 학습·저장.
+ * 주행 한 번을 처음부터 끝까지 돌린다: 주행 감지 → C0 엔진 → F1·F2·F3 정책 → 공조·음성 실행 → 학습·저장.
  *
  * [scope]는 스레드 하나로 제한된 디스패처여야 한다. 모든 상태를 그 스레드에서만 바꾼다.
  */
@@ -59,7 +63,7 @@ class CopilotRunner(
     private val season: () -> SeasonBand,
     private val voiceOut: VoiceOutput,
     private val voiceIn: VoiceInput,
-    private val restAreas: RestAreaSource,
+    private val routes: RouteSource,
     private val config: Config = Config(),
 ) {
 
@@ -69,7 +73,7 @@ class CopilotRunner(
         /** 명세 0.3: P로 돌아온 뒤 60초가 지나면 주행 1회가 끝난다 */
         val tripEndAfterParkedMs: Long = 60_000,
         val listenWindowMs: Long = 8_000,
-        /** 휴게소 정보(TBT)를 다시 요청하는 간격 (틱 단위) */
+        /** 경로·휴게소 정보(TBT)를 다시 요청하는 간격 (틱 단위) */
         val restAreaRefreshTicks: Int = 10,
     )
 
@@ -85,6 +89,8 @@ class CopilotRunner(
     private val policy = CooldownPolicy()
     private val fatigue = FatiguePolicy()
     private val freshAir = FreshAirPolicy()
+    private val briefing = BriefingPolicy()
+    private var briefingJob: Job? = null
     private var engine: PatternEngine? = null
     private var comfort = ComfortProfile.DEFAULT
     private var band = SeasonBand.MILD
@@ -97,7 +103,7 @@ class CopilotRunner(
         if (rootJob != null) return
         vehicle.start()
         hvac.start()
-        restAreas.start()
+        routes.start()
         rootJob = scope.launch {
             hvac.prepare()
             val e = PatternEngine(storage.loadBaseline(), scorer)
@@ -105,6 +111,8 @@ class CopilotRunner(
             comfort = storage.loadComfort()
             launch { e.state.collect { _driverState.value = it } }
             launch { hvac.manualChanges.collect(::onManualChange) }
+            // F1: 경로가 오거나 바뀌면 어려운 구간을 다시 계산하고, 정차 중이면 브리핑한다
+            launch { routes.route.collect { executeBriefing(briefing.onRoute(it, vehicle.drivingState.value)) } }
             vehicle.drivingState.collect(::onDrivingState)
         }
     }
@@ -116,7 +124,7 @@ class CopilotRunner(
         rootJob = null
         tripJob = null
         tripEndJob = null
-        restAreas.stop()
+        routes.stop()
         hvac.stop()
         vehicle.stop()
     }
@@ -152,6 +160,7 @@ class CopilotRunner(
     }
 
     private suspend fun onDrivingState(state: DrivingState) {
+        executeBriefing(briefing.onDrivingState(state, routes.route.value))
         when (state) {
             DrivingState.DRIVING -> {
                 tripEndJob?.cancel()
@@ -193,16 +202,18 @@ class CopilotRunner(
             if (++samples % config.samplesPerTick == 0) {
                 e.tick(now)
                 val driver = e.state.value
+                val route = routes.route.value
                 // F3-02: 피로 케어가 공조를 쓰는 동안 F2는 들어오지 않는다
                 execute(policy.onTick(now, driver, if (fatigue.holdingClimate) null else hvac.snapshot.value))
                 executeFatigue(
                     fatigue.onTick(
                         now, driver, hvac.snapshot.value, policy.intervening,
-                        restAreas.nextRestArea.value, restAreas.nextTurnDistanceM.value,
+                        route?.nextRestArea(), route?.nextTurnDistanceM(),
                     )
                 )
                 executeFreshAir(freshAir.onTick(now, hvac.snapshot.value, suspended = fatigue.holdingClimate))
-                if (samples % (config.samplesPerTick * config.restAreaRefreshTicks) == 0) restAreas.refresh()
+                executeBriefing(briefing.onTick(route, DrivingState.DRIVING))
+                if (samples % (config.samplesPerTick * config.restAreaRefreshTicks) == 0) routes.refresh()
             }
             delay(config.sampleIntervalMs)
         }
@@ -262,6 +273,26 @@ class CopilotRunner(
                 }
                 is FreshAirAction.Started -> Log.i(TAG, "fresh air started")
                 is FreshAirAction.Ended -> Log.i(TAG, "fresh air ended yielded=${action.yielded}")
+            }
+        }
+    }
+
+    private fun executeBriefing(actions: List<BriefingAction>) {
+        for (action in actions) {
+            when (action) {
+                is BriefingAction.SpeakBriefing -> {
+                    briefingJob?.cancel()
+                    briefingJob = scope.launch {
+                        voiceOut.speak(action.text)
+                        briefing.onBriefingFinished()
+                    }
+                }
+                is BriefingAction.SpeakAlert -> scope.launch { voiceOut.speak(action.text) }
+                BriefingAction.StopSpeaking -> {
+                    briefingJob?.cancel()
+                    briefingJob = null
+                    voiceOut.stop()
+                }
             }
         }
     }

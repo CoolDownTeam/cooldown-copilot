@@ -42,12 +42,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** 디버그 빌드에서만: `adb shell am start ... --es scenario f2_aggressive` */
+    /**
+     * 디버그 빌드에서만:
+     * - `--es scenario f2_aggressive`: 녹화한 차량 신호 재생
+     * - `--es demo_route "위도,경도,이름"`: 내비 경로 요청 (F1 확인용). `--ez demo_simulate true`면 모의 주행 시작
+     */
     private fun useScenarioIfRequested() {
-        val name = intent.getStringExtra(EXTRA_SCENARIO) ?: return
         if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
-        val used = (application as CooldownApplication).container.useScenario(name)
-        Log.i(TAG, "scenario $name used=$used")
+        val container = (application as CooldownApplication).container
+        intent.getStringExtra(EXTRA_SCENARIO)?.let { name ->
+            Log.i(TAG, "scenario $name used=${container.useScenario(name)}")
+        }
+        intent.getStringExtra(EXTRA_DEMO_ROUTE)?.split(",")?.takeIf { it.size >= 3 }?.let { parts ->
+            val lat = parts[0].toDoubleOrNull() ?: return@let
+            val lon = parts[1].toDoubleOrNull() ?: return@let
+            val routes = container.routeSource
+            routes.start()
+            routes.requestDemoRoute(lat, lon, parts[2])
+            if (intent.getBooleanExtra(EXTRA_DEMO_SIMULATE, false)) {
+                window.decorView.postDelayed({ routes.startDemoSimulation() }, DEMO_SIMULATE_DELAY_MS)
+            }
+            Log.i(TAG, "demo route requested ${parts[2]}")
+        }
     }
 
     private fun requestPermissionsAndStart() {
@@ -62,6 +78,9 @@ class MainActivity : ComponentActivity() {
     private companion object {
         const val TAG = "MainActivity"
         const val EXTRA_SCENARIO = "scenario"
+        const val EXTRA_DEMO_ROUTE = "demo_route"
+        const val EXTRA_DEMO_SIMULATE = "demo_simulate"
+        const val DEMO_SIMULATE_DELAY_MS = 8_000L
         val RUNTIME_PERMISSIONS = listOf(
             PleosVehicleDataSource.CAR_SPEED_PERMISSION,
             OutsideTemperatureSource.PERMISSION,
