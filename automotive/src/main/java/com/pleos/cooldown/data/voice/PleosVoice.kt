@@ -52,7 +52,10 @@ class PleosVoiceOutput(context: Context) : VoiceOutput {
         })
     }
 
-    /** 다 말할 때까지(또는 오류·시간 초과까지) 기다린다 */
+    /**
+     * 다 말할 때까지(또는 오류·예상 길이 초과까지) 기다린다.
+     * 에뮬레이터에서 onDone이 오지 않는 경우가 있어서, 문장 길이로 재생 시간을 어림해 그만큼만 기다린다.
+     */
     override suspend fun speak(text: String) {
         if (withTimeoutOrNull(READY_TIMEOUT_MS) { ready.await() } != true) return
         val done = CompletableDeferred<Unit>()
@@ -63,7 +66,7 @@ class PleosVoiceOutput(context: Context) : VoiceOutput {
             Log.w(TAG, "TTS speak failed", e)
             return
         }
-        withTimeoutOrNull(SPEAK_TIMEOUT_MS) { done.await() }
+        withTimeoutOrNull(estimatedDurationMs(text)) { done.await() }
     }
 
     fun release() {
@@ -75,10 +78,16 @@ class PleosVoiceOutput(context: Context) : VoiceOutput {
         finished?.complete(Unit)
     }
 
+    /** 한국어 TTS는 초당 6~7음절 안팎이다. 여유 1초를 더하고, 최대 6초까지만 기다린다 */
+    private fun estimatedDurationMs(text: String): Long =
+        (text.count { !it.isWhitespace() } * MS_PER_CHAR + MARGIN_MS).coerceAtMost(MAX_SPEAK_WAIT_MS)
+
     private companion object {
         const val TAG = "PleosTts"
         const val READY_TIMEOUT_MS = 3_000L
-        const val SPEAK_TIMEOUT_MS = 10_000L
+        const val MS_PER_CHAR = 180L
+        const val MARGIN_MS = 1_000L
+        const val MAX_SPEAK_WAIT_MS = 6_000L
     }
 }
 

@@ -126,7 +126,36 @@ class FeatureExtractorTest {
     }
 
     @Test
-    fun `changing speed band starts a new window`() {
+    fun `aggressive cycles across 60 kmh keep their events (emulator regression)`() {
+        // 55↔68 km/h를 오가며 급가속·급제동: 매번 URBAN↔RURAL이 바뀐다
+        drive.cruise(sec = 5.0, kmh = 55.0)
+        repeat(6) {
+            drive.accelerate(sec = 1.0, ms2 = 3.5)
+            drive.cruise(sec = 2.0, kmh = drive.speedKmh)
+            drive.accelerate(sec = 1.0, ms2 = -3.5, brake = true)
+            drive.cruise(sec = 2.0, kmh = drive.speedKmh)
+        }
+
+        val features = drive.snapshot()
+        assertEquals(SpeedBand.URBAN, features.speedBand)
+        assertEquals(6.0, features.value(FeatureId.HARD_ACCEL_PER_MIN), 1e-9)
+    }
+
+    @Test
+    fun `coming back to a speed band keeps its earlier events`() {
+        drive.cruise(sec = 5.0, kmh = 10.0)
+        drive.accelerate(sec = 2.0, ms2 = 3.0)
+        drive.gap(ms = 2_000)
+        drive.cruise(sec = 20.0, kmh = 100.0)
+        drive.gap(ms = 2_000)
+        drive.cruise(sec = 5.0, kmh = 30.0)
+
+        assertEquals(SpeedBand.URBAN, drive.snapshot().speedBand)
+        assertEquals(1.0, drive.snapshot().value(FeatureId.HARD_ACCEL_PER_MIN), 1e-9)
+    }
+
+    @Test
+    fun `each speed band has its own window`() {
         drive.cruise(sec = 5.0, kmh = 10.0)
         drive.accelerate(sec = 2.0, ms2 = 3.0)
         assertEquals(1.0, drive.snapshot().value(FeatureId.HARD_ACCEL_PER_MIN), 1e-9)
