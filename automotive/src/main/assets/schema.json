@@ -1,0 +1,26 @@
+{
+  "packageName": "com.pleos.cooldown",
+  "appDescription": "A driving companion that adjusts the cabin climate to keep the driver calm and alert.",
+  "version": "1.0",
+  "actionCalls": [
+    {
+      "type": "function",
+      "function": {
+        "name": "ADJUST_CABIN_COMFORT",
+        "description": "Undo or stop the cabin climate change that this app made when the driver feels too cold or wants it to stop.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "feeling": {
+              "type": "string",
+              "description": "Whether the driver feels too cold or wants the app to stop adjusting the climate.",
+              "enum": ["cold", "stop"]
+            }
+          },
+          "required": ["feeling"]
+        },
+        "component": "service"
+      }
+    }
+  ]
+}

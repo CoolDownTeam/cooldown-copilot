@@ -40,6 +40,10 @@ android {
     }
     // AAOS CarPropertyManager (차속)
     useLibrary("android.car")
+    // JVM 단위 테스트에서 android.util.Log 등 스텁이 예외 대신 기본값을 돌려주게 한다
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -50,6 +54,8 @@ dependencies {
     // Pleos SDK
     implementation(libs.pleos.vehicle)
     implementation(libs.pleos.navihelper)
+    implementation(libs.pleos.tts)
+    implementation(libs.pleos.stt)
 
     // Coroutines
     implementation(libs.coroutines.android)

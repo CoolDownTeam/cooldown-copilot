@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">쿨다운 코파일럿</string>
+    <string name="copilot_running">운전을 함께 지켜보고 있어요</string>
 </resources>
