@@ -1,7 +1,10 @@
 package com.pleos.cooldown.service
 
 import com.pleos.cooldown.data.hvac.FakeHvacController
-import com.pleos.cooldown.data.navi.FakeRestAreaSource
+import com.pleos.cooldown.data.navi.FakeRouteSource
+import com.pleos.cooldown.domain.briefing.RouteSnapshot
+import com.pleos.cooldown.domain.briefing.Turn
+import com.pleos.cooldown.domain.briefing.TurnKind
 import com.pleos.cooldown.data.vehicle.VehicleDataSource
 import com.pleos.cooldown.data.voice.VoiceInput
 import com.pleos.cooldown.data.voice.VoiceOutput
@@ -13,7 +16,6 @@ import com.pleos.cooldown.domain.cooldown.SeasonBand
 import com.pleos.cooldown.domain.engine.StateScorer
 import com.pleos.cooldown.domain.fatigue.FatiguePhase
 import com.pleos.cooldown.domain.fatigue.FatiguePolicy
-import com.pleos.cooldown.domain.fatigue.RestArea
 import com.pleos.cooldown.domain.model.Baseline
 import com.pleos.cooldown.domain.model.DrivingState
 import com.pleos.cooldown.domain.model.Gear
@@ -40,14 +42,23 @@ class CopilotRunnerTest {
 
     private val vehicle = FakeVehicle()
     private val hvac = FakeHvacController()
-    private val restAreas = FakeRestAreaSource(RestArea("행담도휴게소", 12_000.0), nextTurnM = 5_000.0)
+    private val routes = FakeRouteSource(
+        RouteSnapshot("r1", 9_000, 210_000, listOf(Turn(TurnKind.REST_AREA, 12_000.0, "행담도휴게소")), emptyList())
+    )
     private val storage = MemoryStorage()
     private val spoken = mutableListOf<String>()
     private var reply: String? = null
 
+    private var stops = 0
+    private var speakingMs = 0L
     private val voiceOut = object : VoiceOutput {
         override suspend fun speak(text: String) {
             spoken += text
+            if (speakingMs > 0) delay(speakingMs)
+        }
+
+        override fun stop() {
+            stops++
         }
     }
     private val voiceIn = object : VoiceInput {
@@ -67,7 +78,7 @@ class CopilotRunnerTest {
         season = { SeasonBand.SUMMER },
         voiceOut = voiceOut,
         voiceIn = voiceIn,
-        restAreas = restAreas,
+        routes = routes,
     )
 
     /** 급가속·급제동 반복 (8.5초 주기) */
@@ -229,6 +240,35 @@ class CopilotRunnerTest {
         runCurrent()
 
         assertEquals(false, result)
+        runner.stop()
+    }
+
+    @Test
+    fun `F1 briefs while parked with a route and stops when driving starts`() = runTest {
+        routes.route.value = null
+        speakingMs = 20_000
+        val runner = runner()
+        runner.start()
+        runCurrent()
+        assertTrue(spoken.isEmpty())
+
+        routes.route.value = RouteSnapshot(
+            "r2", 9_000, 210_000,
+            listOf(
+                Turn(TurnKind.KEEP_RIGHT, 40_000.0, "서해안고속도로 방면"),
+                Turn(TurnKind.KEEP_RIGHT, 40_300.0, "서산 방면"),
+            ),
+            emptyList(),
+        )
+        runCurrent()
+        assertEquals(
+            listOf("오늘 길은 2시간 30분이에요. 40km 지점에서 분기가 2번 연속 나와요. 마지막은 오른쪽으로 가세요."),
+            spoken
+        )
+
+        vehicle.drivingState.value = DrivingState.DRIVING
+        runCurrent()
+        assertEquals(1, stops)
         runner.stop()
     }
 
