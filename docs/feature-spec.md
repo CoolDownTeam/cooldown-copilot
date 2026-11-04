@@ -618,6 +618,26 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 | 대시보드·결과·기록·설정 화면 | **폐기.** `docs/screen-spec.md`대로 새로 만든다 | 11/9 |
 | `shared` 모듈의 `MyMusicService` (템플릿 잔재, `appCategory="audio"` 미디어 서비스로 등록됨) | automotive에서 `shared` 의존성 제거. 그래야 앱이 미디어 앱으로 병합되지 않음 | 11/3 완료 |
 
+## 11.5 에뮬레이터 확인 결과 (2026-11-05, Pleos_Connect_v2.0)
+
+| 항목 | 결과 |
+|---|---|
+| 포그라운드 서비스, Vehicle·HVAC·Seat·NaviHelper·TTS·STT 초기화 | 정상 |
+| 외기온 `ENV_OUTSIDE_TEMPERATURE` | 25.0℃ → `SUMMER` |
+| F2 1단계 | 30초 유지 후 설정 온도 24 → 23℃, TTS "조금 시원하게 해 드릴게요", 3초 뒤 STT 응답창 |
+| F2 2단계 | 2분 뒤 22℃, 통풍시트 0 → 1 |
+| Gleo `ADJUST_CABIN_COMFORT(cold)` | 0.5초 안에 24℃·통풍 0 복원, `COLD_FEEDBACK`, `success` 응답 → Gleo가 응답 TTS 단계로 진행 |
+| 주행 종료·저장 | P 60초 뒤 종료, Room에 `SUMMER` 강도 3 → 2, 기준 온도 24℃, 기준선 1회·11.5분 저장 |
+
+**확인 중 발견해 고친 것:** 속성별 VHAL 영역(풍량·풍향 0x5, 전원·내기순환 0x75), 지원 범위 확인을 순차·시간 제한으로, 구독 뒤 현재 값 읽기, SDK 숫자가 Double로 와서 생긴 크래시, 속도대가 바뀔 때 특징 창이 지워지던 문제, TTS `onDone`이 오지 않아 STT가 늦게 열리던 문제.
+
+**에뮬레이터 한계·특이 사항:**
+- Pleos가 풍량 단계 목록과 풍향 지원 목록을 빈 값으로 준다 → 이 에뮬레이터에서는 풍량 +1, 얼굴 쪽 풍향이 동작하지 않는다 (VHAL 자체는 풍량 1~8)
+- VHAL 차속·기어 주입(`inject-vhal-event`)은 곧바로 덮어써진다 → 디버그 빌드의 시나리오 재생(`--es scenario`)이나 Virtual Console을 쓴다
+- 앱은 운전자 프로필(Android 사용자 10)로 돈다. `adb` broadcast는 `--user current`가 필요하다 (F2-24의 프로필별 분리와 일치)
+- 서버에 스키마가 등록되지 않은 상태에서 Gleo Action을 `adb`로 보내면, Gleo가 응답 생성 서버 요청에서 `HTTP 404`로 죽는다 (Gleo 앱 쪽 문제, 문의 필요)
+- TBT는 경로 안내 중에만 와서 휴게소 판정은 F1 경로 연동 때 확인한다
+
 ## 12. 미확인 항목
 
 | 항목 | 영향 | 확인 방법 | 대안 |
