@@ -82,12 +82,52 @@
 
 ---
 
-## 5. 졸음에는 바람보다 휴식이 듣는다 (F3의 근거와 한계)
+## 5. 졸음: 공조는 "깨우기"가 아니라 "예방과 버티기" (F3의 근거)
 
+F3는 세 단계로 설계했다. 각 단계의 근거를 아래에 정리한다. 핵심은 **공조로 졸음을 해결한다고 주장하지 않는 것**이다.
+
+### 5.1 왜 공조로 "깨운다"고 하면 안 되나
 **Reyner, L. A., & Horne, J. A. (1998).** Evaluation of "in-car" countermeasures to sleepiness: Cold air and radio. *Sleep*, 21(1), 46–50. PMID [9485532](https://pubmed.ncbi.nlm.nih.gov/9485532/)
 
 - 잠을 5시간만 잔 운전자 16명이 시뮬레이터로 2.5시간 운전했다. 얼굴로 보내는 찬 바람은 처음 30분 정도만 약간 효과가 있었고, 전체로는 유의하지 않았다.
 - 원문 결론: 찬 바람과 라디오는 "**at best only temporary expedients** to reduce driver sleepiness, perhaps **enabling drivers to find a suitable place to stop, take a break and avail themselves of caffeine and a nap**."
+
+→ 찬 바람은 **휴게소까지 버티게 하는 보조 수단**(F3 `HOLD_ON`)으로만 쓴다. 논문이 제안한 역할과 같다.
+
+### 5.2 ① 예방: 내기순환이 길어지면 실내 CO2가 쌓인다
+**Hudda, N., & Fruin, S. A. (2018).** Carbon dioxide accumulation inside vehicles: The effect of ventilation and driving conditions. *Science of the Total Environment*, 610–611, 1448–1456. [doi:10.1016/j.scitotenv.2017.08.105](https://doi.org/10.1016/j.scitotenv.2017.08.105) · PMID [28873666](https://pubmed.ncbi.nlm.nih.gov/28873666/)
+
+- 환기 설정, 차량 연식, 속도, 실내 부피, 주행 시간, 탑승 인원이 CO2 누적에 주는 영향을 분석했다.
+- **환기 설정이 가장 큰 요인**이었다. 내기순환일 때만 CO2가 우려 수준을 넘었고, 외기 유입에서는 넘지 않았다.
+- **긴 주행과 여러 명 탑승**이 특히 문제다. 1~2명이 평균 통근 시간(26분) 정도 달리면 내기순환이어도 2,500ppm을 넘지 않았다.
+- 권고: 여러 명이 타거나 오래 달릴 때는 내기순환을 **주기적으로 끊거나 외기와 섞어서** 2,500ppm 아래로 유지하라.
+
+**Satish, U., Mendell, M. J., Shekhar, K., Hotchi, T., Sullivan, D., Streufert, S., & Fisk, W. J. (2012).** Is CO2 an indoor pollutant? Direct effects of low-to-moderate CO2 concentrations on human decision-making performance. *Environmental Health Perspectives*, 120(12), 1671–1677. [doi:10.1289/ehp.1104789](https://doi.org/10.1289/ehp.1104789) · PMID [23008272](https://pubmed.ncbi.nlm.nih.gov/23008272/)
+
+- 22명을 600·1,000·2,500ppm에 노출했다(참가자와 시험자 모두 농도를 모름).
+- 600ppm보다 **1,000ppm에서 의사결정 9개 척도 중 6개**, **2,500ppm에서 7개**가 유의하게 떨어졌다. 연구진은 재현이 필요하다고 밝혔다.
+
+**보조 근거 (약함): 스웨덴 VTI "CO2 effects on drivers' state and driving performance" 프로젝트 (2020–2022, Vinnova 지원 2020-02955).** [프로젝트 페이지·최종 보고서](https://www.vinnova.se/en/p/co2-project--co2-effects-on-drivers-state-and-driving-performance)
+
+- 32명이 시뮬레이터에서 CO2 700·1,500·3,000ppm에 노출됐다. 1,500ppm에서 주관·객관적 졸음 증가, 심장 활동 증가, 차량 제어 저하가 나타났다.
+- 다만 효과가 작아 심각한 운전 문제로 이어지지 않았고, 3,000ppm에서는 기준선과 비슷했다. 동료 심사를 거친 논문은 확인하지 못했다.
+
+→ 졸음이 오기 **전에** 내기순환 시간을 관리한다(F3 `FreshAirPolicy`). 차량에 CO2 센서 API가 없어서 Hudda & Fruin의 조건(탑승 인원·주행 시간)으로 **추정**하고, 기준 시간을 그 결과보다 보수적으로 잡는다. "졸음을 깨운다"가 아니라 "**졸음을 부르는 실내 조건을 없앤다**"는 주장이므로 근거와 맞는다. 실내 더위가 경계를 떨어뜨린다는 근거(1절, Wyon 외 1996)도 같은 논리지만, 온도는 운전자가 정한 값이라 예방 단계에서는 바꾸지 않고 F2와 `HOLD_ON`에서만 다룬다.
+
+### 5.3 ② 감지: 운전자는 자기 졸음을 모른다
+**Gaspar, J. G., & Carney, C. (2023).** *Drowsiness and Decision Making During Long Drives: A Driving Simulation Study* (Research Report). AAA Foundation for Traffic Safety, Washington, D.C. [보고서 페이지](https://aaafoundation.org/drowsiness-and-decision-making-during-long-drives-a-driving-simulation-study/)
+
+- 약 3시간 야간 모의 주행에 휴게소를 일정 간격으로 두고, 쉬어 갈지를 참가자가 정하게 했다.
+- 스스로 졸음이 "낮다"고 답한 경우 객관적 측정(눈 영상)으로는 **75%가 중간 이상 졸렸다.** 객관적으로 매우 졸린 상황의 25%에서 스스로는 "낮다"고 답했다.
+
+→ 자기 판단에 맡기지 않고 조향으로 객관적으로 잡는다(C0 피로 점수, 근거는 3절).
+
+### 5.4 ③ 휴식 유도: 경고로는 쉬지 않는다, 쉬는 방법도 중요하다
+**Gaspar & Carney (2023)**, 같은 보고서
+
+- 참가자의 **약 절반이 한 번도 쉬지 않았다.**
+- 스스로 **매우 졸리다고 답했을 때도 75% 넘게 계속 운전**했다.
+- 쉬어 가는 데 의미 있게 영향을 준 것은 스스로 느낀 졸음뿐이었고, 객관적 졸음·차량 제어 악화·주행 시간은 거의 관계가 없었다.
 
 **Horne, J. A., & Reyner, L. A. (1996).** Counteracting driver sleepiness: Effects of napping, caffeine, and placebo. *Psychophysiology*, 33(3), 306–309. [doi:10.1111/j.1469-8986.1996.tb00428.x](https://doi.org/10.1111/j.1469-8986.1996.tb00428.x) · PMID [8936399](https://pubmed.ncbi.nlm.nih.gov/8936399/)
 
@@ -98,9 +138,16 @@
 
 - 낮잠과 카페인 200mg을 함께 쓰면 운전 사고 행동이 위약 대비 **9%**로 줄었다(카페인만 쓰면 34%).
 
-**설계에 반영:**
-- F3의 외기 유입·온도 낮추기는 졸음을 해결하는 수단이 아니라 **휴게소까지 버티게 하는 보조 수단**이다. 1998년 논문의 결론과 정확히 같은 역할이다.
-- F3의 핵심은 휴게소 제안이다. "그냥 쉬기"는 효과가 없었으므로, 제안 문장은 "휴게소에서 커피 한 잔이나 짧은 낮잠을 권해요"처럼 효과가 확인된 행동을 말하도록 다듬는다(명세 F3 개정 예정).
+→ 경고로 끝내지 않는다. **"응" 한마디로 경유지가 들어가게** 해서 쉬기로 결정하는 부담을 줄이고, 휴게소 P단에서 "커피 한 잔이나 15분 낮잠"처럼 **효과가 확인된 행동**을 권한다(F3 `SUGGEST`·`REST_TIP`). 객관적으로 매우 졸리면 찬 바람 단계를 건너뛰고 바로 제안한다(F3-07).
+
+### 5.5 정리
+
+| 단계 | 앱이 하는 일 | 근거 | 주장하지 않는 것 |
+|---|---|---|---|
+| ① 예방 | 내기순환이 길어지면 무음으로 외기 전환 (실내 더위는 F2·`HOLD_ON`이 다룬다) | Hudda & Fruin 2018, Satish 외 2012 (더위: Wyon 외 1996) | CO2를 직접 잰다 (추정이다) |
+| ② 감지 | 조향 미세 보정 감소·정지 비율·연속 주행 시간으로 피로 점수 | Sahayadhas 외 2012, Krajewski 외 2009, Gaspar & Carney 2023 | 졸음을 100% 잡는다 |
+| ③ 휴식 유도 | 한마디로 휴게소 경유지, 도착하면 커피·낮잠 권유 | Gaspar & Carney 2023, Horne & Reyner 1996·1997 | 바람으로 졸음을 없앤다 |
+| 보조 | 휴게소까지 찬 바람으로 버티기 | Reyner & Horne 1998 | — |
 
 ---
 
@@ -151,6 +198,7 @@
 ## 9. 기획서에 쓸 때 주의할 점
 
 - 직접 근거는 **더위가 경계를 떨어뜨린다(1)**는 것이다. 공격성은 현장 연구(2.1)와 반대 근거(2.3)를 함께 언급한다.
-- 졸음은 **바람은 보조, 핵심은 휴식(5)**이라고 쓴다. 1998년 논문이 바로 그 역할을 제안했다는 점이 설계의 과학적 근거가 된다.
+- 졸음은 "공조로 깨운다"고 쓰지 않는다. **① 졸음을 부르는 실내(CO2·더위)를 미리 막고 → ② 운전자도 모르는 졸음을 조향으로 잡아 → ③ 실제로 쉬게 만든다**고 쓴다(5.5 표). 찬 바람은 휴게소까지 버티는 보조이며, 1998년 논문이 바로 그 역할을 제안했다.
+- CO2는 차량에서 직접 재지 않고 탑승 인원·내기순환 시간으로 추정한다는 점을 밝힌다.
 - 조향 기반 졸음 감지는 리뷰(Sahayadhas 2012)와 실험 연구(Krajewski 2009, Sayed 2001)로 뒷받침되지만, 대부분 시뮬레이터 실험이라는 한계가 있다.
 - 국내 통계(7.2)는 발표 기관과 시점을 적고, 원 보도자료를 찾으면 링크를 바꾼다.
