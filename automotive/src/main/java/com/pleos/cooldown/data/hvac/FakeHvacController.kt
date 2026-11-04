@@ -16,7 +16,11 @@ import kotlinx.coroutines.flow.asStateFlow
  * 메모리 안의 가짜 공조. `CONTROL_CAR_CLIMATE` 승인 전 시연과 통합 확인에 쓴다 (명세 1.3).
  */
 class FakeHvacController(
-    initial: HvacSnapshot = HvacSnapshot(temperatureC = 24f, fanSpeed = 3, powerOn = true, fanDirection = FanDirection.FLOOR, seatVentilation = 0),
+    initial: HvacSnapshot = HvacSnapshot(
+        temperatureC = 24f, fanSpeed = 3, powerOn = true, fanDirection = FanDirection.FLOOR, seatVentilation = 0,
+        recirculation = true, autoRecirculation = false,
+    ),
+    private val occupants: Int? = 1,
     private val limits: HvacLimits = HvacLimits(
         minTempC = 16f, maxTempC = 32f, maxFanSpeed = 8, supportsFaceDirection = true, maxSeatVentilation = 3,
     ),
@@ -42,6 +46,13 @@ class FakeHvacController(
         )
         return true
     }
+
+    override suspend fun setRecirculation(on: Boolean): Boolean {
+        _snapshot.value = _snapshot.value?.copy(recirculation = on)
+        return true
+    }
+
+    override suspend fun occupantCount(): Int? = occupants
 
     /** 시연용: 운전자가 직접 조작한 것처럼 만든다 */
     fun simulateManualChange(change: ManualChange, newSnapshot: HvacSnapshot) {

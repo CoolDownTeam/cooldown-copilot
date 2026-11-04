@@ -8,7 +8,10 @@ import com.pleos.cooldown.data.hvac.PleosHvacController
 import com.pleos.cooldown.data.local.BaselineRepository
 import com.pleos.cooldown.data.local.ComfortProfileRepository
 import com.pleos.cooldown.data.local.CopilotDatabase
+import com.pleos.cooldown.data.navi.PleosRestAreaSource
+import com.pleos.cooldown.data.vehicle.FakeVehicleDataSource
 import com.pleos.cooldown.data.vehicle.PleosVehicleDataSource
+import com.pleos.cooldown.data.vehicle.ScenarioParser
 import com.pleos.cooldown.data.vehicle.VehicleDataSource
 import com.pleos.cooldown.data.voice.PleosVoiceInput
 import com.pleos.cooldown.data.voice.PleosVoiceOutput
@@ -21,6 +24,7 @@ import com.pleos.cooldown.service.CopilotStorage
 import com.pleos.cooldown.util.Clock
 import com.pleos.cooldown.util.SystemClock
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import java.time.Instant
@@ -35,7 +39,27 @@ class AppContainer(context: Context) {
     private val appContext = context.applicationContext
 
     val clock: Clock = SystemClock
-    val vehicleDataSource: VehicleDataSource = PleosVehicleDataSource(appContext, clock)
+    var vehicleDataSource: VehicleDataSource = PleosVehicleDataSource(appContext, clock)
+        private set
+
+    private var runnerCreated = false
+
+    /**
+     * 디버그 빌드 시연용: `assets/scenarios/<name>.csv`를 재생하는 가짜 차량 신호로 바꾼다 (명세 10절).
+     * 공조·음성·내비는 실제 SDK를 그대로 쓴다. 러너가 만들어지기 전에만 바꿀 수 있다.
+     */
+    fun useScenario(name: String): Boolean {
+        if (runnerCreated) return false
+        val csv = runCatching {
+            appContext.assets.open("scenarios/$name.csv").bufferedReader().use { it.readText() }
+        }.getOrNull() ?: return false
+        vehicleDataSource = FakeVehicleDataSource(
+            ScenarioParser.parse(csv),
+            CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            clock,
+        )
+        return true
+    }
 
     /**
      * `CONTROL_CAR_CLIMATE` 승인 전 시연은 [FakeHvacController]로 바꾼다 (명세 4.8 시연 방법).
@@ -57,6 +81,7 @@ class AppContainer(context: Context) {
     }
 
     val copilotRunner: CopilotRunner by lazy {
+        runnerCreated = true
         CopilotRunner(
             scope = runnerScope,
             clock = clock,
@@ -72,6 +97,7 @@ class AppContainer(context: Context) {
             season = { SeasonBand.of(outsideTemperature.readCelsius(), LocalDate.now().monthValue) },
             voiceOut = PleosVoiceOutput(appContext),
             voiceIn = PleosVoiceInput(appContext),
+            restAreas = PleosRestAreaSource(appContext),
         )
     }
 

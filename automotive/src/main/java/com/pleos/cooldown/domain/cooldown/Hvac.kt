@@ -11,6 +11,10 @@ data class HvacSnapshot(
     val powerOn: Boolean,
     val fanDirection: FanDirection? = null,
     val seatVentilation: Int? = null,
+    /** 내기순환 켜짐. 지원하지 않으면 null */
+    val recirculation: Boolean? = null,
+    /** 자동 내기순환 켜짐 (F3-P7). 지원하지 않으면 null */
+    val autoRecirculation: Boolean? = null,
 )
 
 /** 앱이 맞추려는 값. null 항목은 건드리지 않는다 */
@@ -31,7 +35,7 @@ data class HvacLimits(
 )
 
 /** 운전자가 직접 바꾼 공조 (F2-04, F2-10) */
-enum class ManualChange { TEMP_UP, TEMP_DOWN, FAN_UP, FAN_DOWN, DIRECTION, SEAT_VENTILATION }
+enum class ManualChange { TEMP_UP, TEMP_DOWN, FAN_UP, FAN_DOWN, DIRECTION, SEAT_VENTILATION, RECIRCULATION }
 
 /**
  * F2-04: 공조 값 변경 콜백이 앱의 변경인지 운전자의 조작인지 가린다.
@@ -45,6 +49,22 @@ class ManualChangeDetector(private val echoWindowMs: Long = 2_000) {
     private var lastFan: Int? = null
     private var lastDirection: FanDirection? = null
     private var lastSeat: Int? = null
+    private var lastRecirculation: Boolean? = null
+    private var expectedRecirculation: Boolean? = null
+    private var expectedRecirculationAtMs = Long.MIN_VALUE
+
+    fun onAppSetRecirculation(nowMs: Long, on: Boolean) {
+        expectedRecirculation = on
+        expectedRecirculationAtMs = nowMs
+    }
+
+    fun onRecirculation(nowMs: Long, on: Boolean): ManualChange? {
+        val previous = lastRecirculation
+        lastRecirculation = on
+        if (previous == null || on == previous) return null
+        if (nowMs - expectedRecirculationAtMs <= echoWindowMs && expectedRecirculation == on) return null
+        return ManualChange.RECIRCULATION
+    }
 
     fun onAppSet(nowMs: Long, target: HvacTarget) {
         expected = target

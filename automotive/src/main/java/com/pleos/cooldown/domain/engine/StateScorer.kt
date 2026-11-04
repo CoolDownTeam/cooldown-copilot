@@ -63,6 +63,7 @@ class StateScorer(
             fatigue = toScore(fatigueSum, config.fatigueDivisor),
             speedBand = features.speedBand,
             learning = learning,
+            continuousDrivingMs = features.continuousDrivingMs,
         )
     }
 

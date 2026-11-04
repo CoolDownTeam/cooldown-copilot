@@ -85,11 +85,12 @@ class CooldownPolicy(private val config: Config = Config()) {
 
     /** F2-04·F2-10: 개입 중 운전자 조작 → 복원하지 않고 양보 */
     fun onManualChange(nowMs: Long, change: ManualChange): List<CooldownAction> {
-        if (!intervening) return emptyList()
+        // 내·외기는 F2가 다루지 않는다 (F3-P6)
+        if (!intervening || change == ManualChange.RECIRCULATION) return emptyList()
         val signal = when (change) {
             ManualChange.TEMP_UP -> ComfortSignal.STRONG_COLD
             ManualChange.FAN_DOWN, ManualChange.DIRECTION, ManualChange.SEAT_VENTILATION -> ComfortSignal.WEAK_COLD
-            ManualChange.TEMP_DOWN, ManualChange.FAN_UP -> null
+            ManualChange.TEMP_DOWN, ManualChange.FAN_UP, ManualChange.RECIRCULATION -> null
         }
         return buildList {
             add(endIntervention(nowMs, InterventionOutcome.YIELDED_MANUAL))

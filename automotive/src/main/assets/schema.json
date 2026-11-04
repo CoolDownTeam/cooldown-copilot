@@ -14,10 +14,35 @@
             "feeling": {
               "type": "string",
               "description": "Whether the driver feels too cold or wants the app to stop adjusting the climate.",
-              "enum": ["cold", "stop"]
+              "enum": [
+                "cold",
+                "stop"
+              ]
             }
           },
-          "required": ["feeling"]
+          "required": [
+            "feeling"
+          ]
+        },
+        "component": "service"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "ANSWER_REST_SUGGESTION",
+        "description": "Answer the app's suggestion to take a break at the upcoming rest area on the route.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "accept": {
+              "type": "boolean",
+              "description": "True if the driver wants to stop at the suggested rest area."
+            }
+          },
+          "required": [
+            "accept"
+          ]
         },
         "component": "service"
       }

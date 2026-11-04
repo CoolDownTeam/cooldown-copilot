@@ -91,6 +91,8 @@ data class DriverState(
     val fatigue: Int,
     val speedBand: SpeedBand,
     val learning: Boolean,
+    /** C0-08. F3-01 판정에 쓴다 */
+    val continuousDrivingMs: Long = 0,
 ) {
     companion object {
         val IDLE = DriverState(timestampMs = 0L, aggression = 0, fatigue = 0, speedBand = SpeedBand.URBAN, learning = true)
