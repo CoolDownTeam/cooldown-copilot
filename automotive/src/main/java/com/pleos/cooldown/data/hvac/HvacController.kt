@@ -26,4 +26,10 @@ interface HvacController {
 
     /** 값을 바꾼다. 하나라도 실패하면 false (F2-06) */
     suspend fun apply(target: HvacTarget): Boolean
+
+    /** 내·외기 전환 (F3). 실패하면 false */
+    suspend fun setRecirculation(on: Boolean): Boolean
+
+    /** F3-P2: 탑승 인원. 좌석 감지를 지원하지 않으면 null */
+    suspend fun occupantCount(): Int?
 }

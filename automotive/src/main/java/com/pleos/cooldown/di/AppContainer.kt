@@ -8,6 +8,7 @@ import com.pleos.cooldown.data.hvac.PleosHvacController
 import com.pleos.cooldown.data.local.BaselineRepository
 import com.pleos.cooldown.data.local.ComfortProfileRepository
 import com.pleos.cooldown.data.local.CopilotDatabase
+import com.pleos.cooldown.data.navi.PleosRestAreaSource
 import com.pleos.cooldown.data.vehicle.PleosVehicleDataSource
 import com.pleos.cooldown.data.vehicle.VehicleDataSource
 import com.pleos.cooldown.data.voice.PleosVoiceInput
@@ -72,6 +73,7 @@ class AppContainer(context: Context) {
             season = { SeasonBand.of(outsideTemperature.readCelsius(), LocalDate.now().monthValue) },
             voiceOut = PleosVoiceOutput(appContext),
             voiceIn = PleosVoiceInput(appContext),
+            restAreas = PleosRestAreaSource(appContext),
         )
     }
 

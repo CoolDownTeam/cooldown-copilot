@@ -9,6 +9,7 @@ import ai.pleos.playground.vehicle.constant.control.FanDirectionType
 import ai.pleos.playground.vehicle.constant.unit.TemperatureUnit
 import ai.pleos.playground.vehicle.listener.HvacFanSpeedListener
 import ai.pleos.playground.vehicle.listener.HvacPowerStateListener
+import ai.pleos.playground.vehicle.listener.HvacRecirculationStateListener
 import ai.pleos.playground.vehicle.listener.HvacSeatVentilationListener
 import ai.pleos.playground.vehicle.listener.HvacTemperatureListener
 import android.content.Context
@@ -59,6 +60,8 @@ class PleosHvacController(
     private var powerOn: Boolean? = null
     private var fanDirection: FanDirection? = null
     private var seatVentilation: Int? = null
+    private var recirculation: Boolean? = null
+    private var autoRecirculation: Boolean? = null
 
     private val temperatureListener = object : HvacTemperatureListener {
         override fun onHvacTemperatureUpdated(value: Float?) {
@@ -98,6 +101,25 @@ class PleosHvacController(
         override fun onFailed(e: Exception) = logFailure("seat ventilation", e)
     }
 
+    // SDK는 일반·자동 내기순환 구독에 같은 리스너 타입을 쓴다 (콜백 이름은 onHvacAutoRecirculationStateUpdated)
+    private val recirculationListener = object : HvacRecirculationStateListener {
+        override fun onHvacAutoRecirculationStateUpdated(value: Boolean?) {
+            val v = value ?: return
+            recirculation = v
+            detector.onRecirculation(clock.nowMs(), v)?.let(_manualChanges::tryEmit)
+            publish()
+        }
+        override fun onFailed(e: Exception) = logFailure("recirculation", e)
+    }
+
+    private val autoRecirculationListener = object : HvacRecirculationStateListener {
+        override fun onHvacAutoRecirculationStateUpdated(value: Boolean?) {
+            autoRecirculation = value ?: return
+            publish()
+        }
+        override fun onFailed(e: Exception) = logFailure("auto recirculation", e)
+    }
+
     override fun start() {
         if (vehicle != null) return
         try {
@@ -107,6 +129,8 @@ class PleosHvacController(
                 registerHvacTemperature(driverSeat, temperatureListener)
                 registerHvacFanSpeed(driverSeat, fanSpeedListener)
                 registerHvacPowerState(driverSeat, powerListener)
+                registerHvacRecirculationState(driverSeat, recirculationListener)
+                registerHvacAutoRecirculationState(driverSeat, autoRecirculationListener)
                 // 풍향은 변경 리스너가 없어서 시작할 때 한 번 읽는다
                 getHvacFanDirection(driverSeat, { type ->
                     fanDirection = type?.toDomain()
@@ -127,6 +151,8 @@ class PleosHvacController(
                 unregisterHvacTemperature(driverSeat, temperatureListener)
                 unregisterHvacFanSpeed(driverSeat, fanSpeedListener)
                 unregisterHvacPowerState(driverSeat, powerListener)
+                unregisterHvacRecirculationState(driverSeat, recirculationListener)
+                unregisterHvacAutoRecirculationState(driverSeat, autoRecirculationListener)
             }
             v.getSeat().unregisterHvacSeatVentilation(driverSeat, seatVentilationListener)
             v.release()
@@ -184,11 +210,31 @@ class PleosHvacController(
         return true
     }
 
+    override suspend fun setRecirculation(on: Boolean): Boolean {
+        val v = vehicle ?: return false
+        detector.onAppSetRecirculation(clock.nowMs(), on)
+        return set { ok, fail -> v.getHVAC().setHvacRecirculation(driverSeat, on, { _, _ -> ok() }, fail) }
+    }
+
+    /** 착석 감지를 지원하는 좌석마다 물어서 센다. 권한: `CAR_SEATS` */
+    override suspend fun occupantCount(): Int? {
+        val seat = vehicle?.getSeat() ?: return null
+        val areas = request<List<SeatArea>> { ok, fail -> seat.checkSeatOccupancyCapabilities(ok, fail) }
+            ?.takeIf { it.isNotEmpty() } ?: return null
+        var count = 0
+        for (area in areas) {
+            val occupied = request<Boolean?> { ok, fail -> seat.getCurrentSeatOccupancy(area, ok, fail) }
+            if (occupied == true) count++
+        }
+        // 운전자 좌석 감지가 없어도 운전자는 있다
+        return count.coerceAtLeast(1)
+    }
+
     private fun publish() {
         val t = temperature ?: return
         val f = fanSpeed ?: return
         val p = powerOn ?: return
-        _snapshot.update { HvacSnapshot(t, f, p, fanDirection, seatVentilation) }
+        _snapshot.update { HvacSnapshot(t, f, p, fanDirection, seatVentilation, recirculation, autoRecirculation) }
     }
 
     /** 운전석 값을 고른다. 키가 정확히 같지 않을 수 있어 좌석 값으로 찾는다 */

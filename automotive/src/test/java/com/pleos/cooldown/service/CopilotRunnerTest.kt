@@ -1,6 +1,7 @@
 package com.pleos.cooldown.service
 
 import com.pleos.cooldown.data.hvac.FakeHvacController
+import com.pleos.cooldown.data.navi.FakeRestAreaSource
 import com.pleos.cooldown.data.vehicle.VehicleDataSource
 import com.pleos.cooldown.data.voice.VoiceInput
 import com.pleos.cooldown.data.voice.VoiceOutput
@@ -10,6 +11,9 @@ import com.pleos.cooldown.domain.cooldown.CooldownPolicy
 import com.pleos.cooldown.domain.cooldown.Feedback
 import com.pleos.cooldown.domain.cooldown.SeasonBand
 import com.pleos.cooldown.domain.engine.StateScorer
+import com.pleos.cooldown.domain.fatigue.FatiguePhase
+import com.pleos.cooldown.domain.fatigue.FatiguePolicy
+import com.pleos.cooldown.domain.fatigue.RestArea
 import com.pleos.cooldown.domain.model.Baseline
 import com.pleos.cooldown.domain.model.DrivingState
 import com.pleos.cooldown.domain.model.Gear
@@ -36,6 +40,7 @@ class CopilotRunnerTest {
 
     private val vehicle = FakeVehicle()
     private val hvac = FakeHvacController()
+    private val restAreas = FakeRestAreaSource(RestArea("행담도휴게소", 12_000.0), nextTurnM = 5_000.0)
     private val storage = MemoryStorage()
     private val spoken = mutableListOf<String>()
     private var reply: String? = null
@@ -62,6 +67,7 @@ class CopilotRunnerTest {
         season = { SeasonBand.SUMMER },
         voiceOut = voiceOut,
         voiceIn = voiceIn,
+        restAreas = restAreas,
     )
 
     /** 급가속·급제동 반복 (8.5초 주기) */
@@ -160,6 +166,69 @@ class CopilotRunnerTest {
 
         assertTrue(runner.cooldownPhase.value != CooldownPhase.DISABLED)
         assertEquals(10, storage.baseline.totalTrips)
+        runner.stop()
+    }
+
+    /** 고속도로를 핸들 그대로 두고 단조롭게 달린다 (조향 미세 보정 0, 정지 비율 1) */
+    private fun TestScope.driveMonotonously() {
+        backgroundScope.launch {
+            while (true) {
+                vehicle.emit(100.0, brake = false)
+                delay(100)
+            }
+        }
+    }
+
+    @Test
+    fun `F3 long monotonous drive - fresh air, hold on, suggestion, rest tip`() = runTest {
+        val runner = runner()
+        runner.start()
+        vehicle.drivingState.value = DrivingState.DRIVING
+        driveMonotonously()
+
+        // ① 예방: 운전자 1명, 내기순환 30분 → 외기 5분
+        advanceTimeBy(30 * 60_000L + 2_000)
+        assertEquals(false, hvac.snapshot.value?.recirculation)
+        advanceTimeBy(5 * 60_000L)
+        assertEquals(true, hvac.snapshot.value?.recirculation)
+        assertTrue(spoken.isEmpty())
+
+        // ② 감지 → HOLD_ON: 연속 40분이 지나고 피로 60 이상 60초
+        advanceTimeBy(7 * 60_000L)
+        assertEquals(FatiguePhase.HOLD_ON, runner.fatiguePhase.value)
+        assertEquals(23f, hvac.snapshot.value?.temperatureC)
+        assertEquals(false, hvac.snapshot.value?.recirculation)
+
+        // ③ 10분 뒤 휴게소 제안 → "응"
+        reply = "응 들르자"
+        advanceTimeBy(10 * 60_000L + 5_000)
+        assertEquals(
+            listOf("12km 앞 행담도휴게소에서 잠깐 쉬어 갈까요?", FatiguePolicy.MESSAGE_ACCEPTED),
+            spoken
+        )
+        assertEquals(FatiguePhase.HEADING_TO_REST, runner.fatiguePhase.value)
+
+        // 휴게소에서 P단 → 휴식 요령, 공조 복원
+        vehicle.drivingState.value = DrivingState.PARKED
+        runCurrent()
+        assertEquals(FatiguePolicy.MESSAGE_REST_TIP, spoken.last())
+        assertEquals(24f, hvac.snapshot.value?.temperatureC)
+        assertEquals(true, hvac.snapshot.value?.recirculation)
+        runner.stop()
+    }
+
+    @Test
+    fun `Gleo rest reply is handled only while a suggestion waits`() = runTest {
+        val runner = runner()
+        runner.start()
+        vehicle.drivingState.value = DrivingState.DRIVING
+        advanceTimeBy(5_000)
+
+        var result: Boolean? = null
+        runner.handleGleoRestReply(accepted = true) { result = it }
+        runCurrent()
+
+        assertEquals(false, result)
         runner.stop()
     }
 

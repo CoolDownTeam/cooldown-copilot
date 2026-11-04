@@ -73,6 +73,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="ADJUST_CABIN_COMFORT" />
+                <action android:name="ANSWER_REST_SUGGESTION" />
             </intent-filter>
         </receiver>
 
