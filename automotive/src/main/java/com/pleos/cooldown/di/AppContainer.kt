@@ -8,6 +8,9 @@ import com.pleos.cooldown.data.hvac.PleosHvacController
 import com.pleos.cooldown.data.local.BaselineRepository
 import com.pleos.cooldown.data.local.ComfortProfileRepository
 import com.pleos.cooldown.data.local.CopilotDatabase
+import com.pleos.cooldown.data.local.TripRepository
+import com.pleos.cooldown.data.settings.SettingsStore
+import com.pleos.cooldown.domain.report.TripWithInterventions
 import com.pleos.cooldown.data.navi.PleosRouteSource
 import com.pleos.cooldown.data.vehicle.FakeVehicleDataSource
 import com.pleos.cooldown.data.vehicle.PleosVehicleDataSource
@@ -72,6 +75,9 @@ class AppContainer(context: Context) {
     private val database: CopilotDatabase by lazy { CopilotDatabase.create(appContext) }
     val baselineRepository: BaselineRepository by lazy { BaselineRepository(database.baselineDao()) }
     val comfortRepository: ComfortProfileRepository by lazy { ComfortProfileRepository(database.comfortProfileDao()) }
+    val tripRepository: TripRepository by lazy { TripRepository(database.tripDao()) }
+
+    val settingsStore: SettingsStore by lazy { SettingsStore(appContext) }
 
     private val outsideTemperature = OutsideTemperatureSource(appContext)
 
@@ -95,12 +101,18 @@ class AppContainer(context: Context) {
                 override suspend fun saveBaseline(baseline: Baseline) = baselineRepository.save(baseline)
                 override suspend fun loadComfort(): ComfortProfile = comfortRepository.load()
                 override suspend fun saveComfort(profile: ComfortProfile) = comfortRepository.save(profile)
+                override suspend fun saveTrip(record: TripWithInterventions): Long = tripRepository.save(record)
+                override suspend fun resetLearning() {
+                    baselineRepository.reset()
+                    comfortRepository.reset()
+                }
             },
             scorer = StateScorer(hourOfDay = { ms -> Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).hour }),
             season = { SeasonBand.of(outsideTemperature.readCelsius(), LocalDate.now().monthValue) },
             voiceOut = PleosVoiceOutput(appContext),
             voiceIn = PleosVoiceInput(appContext),
             routes = routeSource,
+            settings = { settingsStore.settings.value },
         )
     }
 
