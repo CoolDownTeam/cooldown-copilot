@@ -43,6 +43,8 @@ android {
     // JVM 단위 테스트에서 android.util.Log 등 스텁이 예외 대신 기본값을 돌려주게 한다
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // 시나리오 테스트가 CSV를 직접 읽으므로, CSV가 바뀌면 테스트를 다시 돌린다
+        unitTests.all { it.inputs.dir("src/debug/assets/scenarios") }
     }
 }
 

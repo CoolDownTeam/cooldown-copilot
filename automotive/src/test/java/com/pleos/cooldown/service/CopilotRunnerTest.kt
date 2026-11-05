@@ -18,6 +18,12 @@ import com.pleos.cooldown.domain.fatigue.FatiguePhase
 import com.pleos.cooldown.domain.fatigue.FatiguePolicy
 import com.pleos.cooldown.domain.model.Baseline
 import com.pleos.cooldown.domain.model.DrivingState
+import com.pleos.cooldown.domain.cooldown.ComfortLearner
+import com.pleos.cooldown.domain.cooldown.ComfortSignal
+import com.pleos.cooldown.domain.report.InterventionKind
+import com.pleos.cooldown.domain.report.InterventionResult
+import com.pleos.cooldown.domain.report.TripWithInterventions
+import com.pleos.cooldown.domain.settings.CopilotSettings
 import com.pleos.cooldown.domain.model.Gear
 import com.pleos.cooldown.domain.model.SignalType
 import com.pleos.cooldown.domain.model.VehicleSignal
@@ -68,6 +74,8 @@ class CopilotRunnerTest {
         }
     }
 
+    private var settings = CopilotSettings.DEFAULT
+
     private fun TestScope.runner(): CopilotRunner = CopilotRunner(
         scope = backgroundScope,
         clock = Clock { testScheduler.currentTime },
@@ -79,6 +87,7 @@ class CopilotRunnerTest {
         voiceOut = voiceOut,
         voiceIn = voiceIn,
         routes = routes,
+        settings = { settings },
     )
 
     /** 급가속·급제동 반복 (8.5초 주기) */
@@ -115,6 +124,14 @@ class CopilotRunnerTest {
         assertEquals(24f, hvac.snapshot.value?.temperatureC)
         assertEquals(11, storage.baseline.totalTrips)
         assertNotNull(storage.comfort.band(SeasonBand.SUMMER).baselineTempC)
+
+        // F4: 개입 기록이 남고, 5분 미만 주행이라 리포트는 자동으로 띄우지 않는다
+        val trip = storage.trips.single()
+        val cooldown = trip.interventions.single()
+        assertEquals(InterventionKind.COOLDOWN, cooldown.kind)
+        assertEquals(InterventionResult.DONE, cooldown.result)
+        assertEquals(11, trip.trip.learnedTrips)
+        assertEquals(false, runner.finishedTrip.value?.autoShow)
         runner.stop()
     }
 
@@ -136,6 +153,9 @@ class CopilotRunnerTest {
         advanceTimeBy(61_000)
         runCurrent()
         assertEquals(2, storage.comfort.band(SeasonBand.SUMMER).level)
+        val cold = storage.trips.single().interventions.single()
+        assertEquals(InterventionResult.COLD, cold.result)
+        assertEquals(-1, cold.levelChange)
         runner.stop()
     }
 
@@ -225,6 +245,48 @@ class CopilotRunnerTest {
         assertEquals(FatiguePolicy.MESSAGE_REST_TIP, spoken.last())
         assertEquals(24f, hvac.snapshot.value?.temperatureC)
         assertEquals(true, hvac.snapshot.value?.recirculation)
+
+        advanceTimeBy(61_000)
+        runCurrent()
+        val record = storage.trips.single()
+        assertTrue(record.interventions.any { it.kind == InterventionKind.FRESH_AIR })
+        assertTrue(record.interventions.any { it.kind == InterventionKind.FATIGUE_HOLD_ON })
+        assertEquals(InterventionResult.RESTED, record.interventions.single { it.kind == InterventionKind.FATIGUE_SUGGEST }.result)
+        assertEquals(true, runner.finishedTrip.value?.autoShow)
+        runner.stop()
+    }
+
+    @Test
+    fun `S1-02 turning cooldown and voice off keeps the cabin and stays silent`() = runTest {
+        settings = CopilotSettings(cooldownEnabled = false, voiceEnabled = false)
+        val runner = runner()
+        runner.start()
+        vehicle.drivingState.value = DrivingState.DRIVING
+        driveAggressively()
+
+        advanceTimeBy(90_000)
+
+        assertEquals(CooldownPhase.DISABLED, runner.cooldownPhase.value)
+        assertEquals(24f, hvac.snapshot.value?.temperatureC)
+        assertTrue(spoken.isEmpty())
+        runner.stop()
+    }
+
+    @Test
+    fun `S1-03 relearning resets baseline and comfort while parked`() = runTest {
+        storage.comfort = ComfortLearner.apply(ComfortProfile.DEFAULT, SeasonBand.SUMMER, ComfortSignal.STRONG_COLD)
+        val runner = runner()
+        runner.start()
+        runCurrent()
+
+        var done: Boolean? = null
+        runner.resetLearning { done = it }
+        runCurrent()
+
+        assertEquals(true, done)
+        assertEquals(Baseline.DEFAULT, storage.baseline)
+        assertEquals(0, runner.baseline.value?.totalTrips)
+        assertEquals(ComfortProfile.DEFAULT, runner.comfortProfile.value)
         runner.stop()
     }
 
@@ -294,6 +356,15 @@ class CopilotRunnerTest {
         override suspend fun loadComfort() = comfort
         override suspend fun saveComfort(profile: ComfortProfile) {
             comfort = profile
+        }
+        val trips = mutableListOf<TripWithInterventions>()
+        override suspend fun saveTrip(record: TripWithInterventions): Long {
+            trips += record
+            return trips.size.toLong()
+        }
+        override suspend fun resetLearning() {
+            baseline = Baseline.DEFAULT
+            comfort = ComfortProfile.DEFAULT
         }
     }
 }

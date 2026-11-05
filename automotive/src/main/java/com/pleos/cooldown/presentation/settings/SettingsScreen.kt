@@ -1,154 +1,103 @@
 package com.pleos.cooldown.presentation.settings
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.pleos.cooldown.presentation.theme.*
+import com.pleos.cooldown.domain.cooldown.ComfortProfile
+import com.pleos.cooldown.domain.cooldown.SeasonBand
+import com.pleos.cooldown.domain.report.ComfortDescriber
+import com.pleos.cooldown.domain.settings.CopilotSettings
+import com.pleos.cooldown.presentation.components.CardLabel
+import com.pleos.cooldown.presentation.components.CopilotCard
+import com.pleos.cooldown.presentation.components.PrimaryButton
+import com.pleos.cooldown.presentation.components.ScreenPadding
+import com.pleos.cooldown.presentation.components.SecondaryButton
+import com.pleos.cooldown.presentation.components.SwitchRow
+import com.pleos.cooldown.presentation.components.TopBar
+import com.pleos.cooldown.presentation.components.TwoPane
+import com.pleos.cooldown.presentation.theme.CopilotTheme
 
+/**
+ * SC-06 설정 (화면 명세 7절, S1-02·03). 왼쪽 기능 켜기·끄기, 오른쪽 배운 내 취향(읽기 전용, F2-07).
+ */
 @Composable
 fun SettingsScreen(
-    onNavigateBack: () -> Unit,
-    viewModel: SettingsViewModel = viewModel()
+    settings: CopilotSettings,
+    comfort: ComfortProfile,
+    season: SeasonBand,
+    onChange: ((CopilotSettings) -> CopilotSettings) -> Unit,
+    onRelearn: () -> Unit,
+    onBack: () -> Unit,
 ) {
-    val state by viewModel.state.collectAsState()
+    val c = CopilotTheme.colors
+    var confirm by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(24.dp)
-    ) {
-        // 헤더
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onNavigateBack,
-                modifier = Modifier.size(76.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "뒤로",
-                    modifier = Modifier.size(36.dp),
-                    tint = TextPrimary
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Text(
-                text = "설정",
-                style = MaterialTheme.typography.headlineMedium,
-                color = TextPrimary
-            )
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // 설정 항목들
-        SettingsSection(title = "주행 시작") {
-            SettingsSwitch(
-                title = "시동 시 자동 시작",
-                description = "차량 시동이 켜지면 자동으로 주행 모니터링을 시작합니다",
-                checked = state.autoStartEnabled,
-                onCheckedChange = viewModel::setAutoStart
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        SettingsSection(title = "알림") {
-            SettingsSwitch(
-                title = "위반 알림",
-                description = "교통법규 위반 시 알림을 표시합니다",
-                checked = state.violationAlertEnabled,
-                onCheckedChange = viewModel::setViolationAlert
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            SettingsSwitch(
-                title = "사고다발구역 알림",
-                description = "사고다발구역 진입 시 알림을 표시합니다",
-                checked = state.accidentZoneAlertEnabled,
-                onCheckedChange = viewModel::setAccidentZoneAlert
-            )
-        }
-    }
-}
-
-@Composable
-private fun SettingsSection(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Column {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = Primary
+    Column(Modifier.fillMaxSize().padding(ScreenPadding)) {
+        TopBar("설정", onBack)
+        Spacer(Modifier.height(28.dp))
+        TwoPane(
+            primaryWeight = 1f,
+            primary = {
+                CopilotCard(Modifier.fillMaxWidth()) {
+                    CardLabel("기능")
+                    SwitchRow("쿨다운 캐빈", "거칠어지면 공조를 살짝 시원하게", settings.cooldownEnabled, { on -> onChange { it.copy(cooldownEnabled = on) } })
+                    SwitchRow("피로 케어", "환기하고, 졸리면 쉬어 갈 곳을 권해요", settings.fatigueEnabled, { on -> onChange { it.copy(fatigueEnabled = on) } }, accent = c.warm)
+                    SwitchRow("코스 브리핑", "출발 전에 어려운 구간을 알려 드려요", settings.briefingEnabled, { on -> onChange { it.copy(briefingEnabled = on) } })
+                    SwitchRow("음성 안내", "끄면 공조만 조절하고 말하지 않아요", settings.voiceEnabled, { on -> onChange { it.copy(voiceEnabled = on) } })
+                }
+            },
+            secondary = {
+                CopilotCard(Modifier.fillMaxWidth()) {
+                    CardLabel("배운 내 취향")
+                    SeasonBand.entries.forEach { band ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                ComfortDescriber.seasonName(band) + if (band == season) " · 지금" else "",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = if (band == season) c.cool else c.text,
+                                modifier = Modifier.weight(0.8f),
+                            )
+                            Text(ComfortDescriber.intensity(comfort, band), style = MaterialTheme.typography.bodyLarge, color = c.textSecondary, modifier = Modifier.weight(1.4f))
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        ComfortDescriber.baselineTemp(comfort, season) ?: "평소 두시는 온도는 아직 배우는 중이에요",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = c.text,
+                    )
+                    Text("춥다고 하시면 덜 차갑게, 편하게 지나가면 그대로 둬요.", style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+                }
+                SecondaryButton("운전 습관 다시 배우기", { confirm = true })
+                Text("데이터는 차 밖으로 나가지 않아요.", style = MaterialTheme.typography.bodyMedium, color = c.textMuted)
+            },
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = SurfaceVariant
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp)
-            ) {
-                content()
-            }
-        }
     }
-}
 
-@Composable
-private fun SettingsSwitch(
-    title: String,
-    description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = TextPrimary
-            )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary
-            )
-        }
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = OnPrimary,
-                checkedTrackColor = Primary
-            )
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text("처음부터 다시 배울까요?", style = MaterialTheme.typography.headlineSmall) },
+            text = { Text("평소 운전, 계절별 강도, 평소 온도를 지워요. 주행 기록은 남아요.", style = MaterialTheme.typography.bodyLarge) },
+            confirmButton = { PrimaryButton("다시 배우기", { confirm = false; onRelearn() }) },
+            dismissButton = { SecondaryButton("취소", { confirm = false }) },
+            containerColor = c.surface,
         )
     }
 }
