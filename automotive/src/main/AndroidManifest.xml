@@ -52,6 +52,10 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
+            <!-- SC-03 주행 중 화면을 이 Activity가 그린다. 주행 중에는 앱이 스스로 SC-03만 보여 준다 (화면 명세 1·5절) -->
+            <meta-data
+                android:name="distractionOptimized"
+                android:value="true" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

@@ -548,6 +548,15 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 ### 7.2 화면 구성
 `docs/screen-spec.md` 4절(SC-04)을 따른다. 헤드라인 문장, 숫자 3개, 개입 타임라인(학습 결과 문구 포함), 최근 7회 공격성·피로 추세, 학습 상태로 구성한다.
 
+### 7.2.1 문장 규칙 (`TripSummarizer`, 2026-11-06 구현)
+
+| 항목 | 규칙 |
+|---|---|
+| 헤드라인 | 이번 주행 평균 공격성 − 최근 7회 평균. −6 이하 "평소보다 차분한 주행이었어요", +6 이상 "오늘은 조금 바빴네요", 그 사이 "평소와 비슷했어요". 지난 기록이 없으면 기준 20점(기준선과 같은 운전의 점수)과 비교 |
+| 휴게소 제안 기록 | F3 단계가 `AWAITING_REPLY`로 바뀔 때 시작, 다음 단계가 `HEADING_TO_REST`면 수락, 그 외는 거절. 수락 뒤 정차하면 `RESTED` |
+| 저장 시점 | 주행 1회가 끝날 때(P 후 60초) 한 번 저장. 5분 이상이면 리포트를 띄운다 |
+| DB 버전 | v2. 출시 전이라 스키마가 바뀌면 지우고 다시 만든다(`fallbackToDestructiveMigration`) |
+
 ### 7.3 저장 모델 (Room)
 
 ```kotlin
@@ -558,12 +567,17 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
     val avgAggression: Int, val maxAggression: Int,
     val avgFatigue: Int, val maxFatigue: Int,
     val learning: Boolean,
+    val learnedTrips: Int,          // 이 주행까지 쌓인 주행 수 (학습 진행 "3/5회")
+    val hardSections: Int?,         // F1 직전 안내로 지난 어려운 구간 수. 경로 안내가 없었으면 null
+    val longestCalmMs: Long,        // 공격성 40 미만이 이어진 가장 긴 시간
 )
-@Entity data class InterventionEntity(
+@Entity data class InterventionEntity(   // trip 삭제 시 함께 삭제 (CASCADE)
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val tripId: Long, val startMs: Long, val endMs: Long?,
     val kind: String,      // COOLDOWN / FRESH_AIR / FATIGUE_HOLD_ON / FATIGUE_SUGGEST
-    val maxStage: Int, val outcome: String,   // RESTORED / YIELDED / ACCEPTED / DECLINED ...
+    val maxStage: Int,
+    val outcome: String,   // DONE / COLD / STOPPED / YIELDED / FAILED / ACCEPTED / DECLINED / RESTED
+    val levelChange: Int,  // 이 개입 뒤 F2 강도 변화. −1이면 "다음엔 덜 차갑게 할게요"
 )
 @Entity data class BaselineEntity(
     @PrimaryKey val id: Int = 0, val json: String, val totalTrips: Int, val totalMinutes: Double,

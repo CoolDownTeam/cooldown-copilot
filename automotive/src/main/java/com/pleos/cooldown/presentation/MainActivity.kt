@@ -9,13 +9,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Modifier
+import androidx.lifecycle.ViewModelProvider
 import com.pleos.cooldown.CooldownApplication
 import com.pleos.cooldown.data.hvac.OutsideTemperatureSource
 import com.pleos.cooldown.data.vehicle.PleosVehicleDataSource
-import com.pleos.cooldown.presentation.navigation.AppNavigation
 import com.pleos.cooldown.presentation.theme.CooldownTheme
 import com.pleos.cooldown.service.CopilotService
 
@@ -24,22 +21,35 @@ class MainActivity : ComponentActivity() {
     // 런타임 권한을 받은 뒤 서비스를 시작한다. 거부돼도 시작하고, 없는 신호는 데이터 소스가 사용 불가로 표시한다
     private val permissionRequest =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-            (application as CooldownApplication).container.vehicleDataSource.start()
+            container.vehicleDataSource.start()
             CopilotService.start(this)
         }
+
+    private val container get() = (application as CooldownApplication).container
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         useScenarioIfRequested()
         enableEdgeToEdge()
-        requestPermissionsAndStart()
+        container.uxRestrictions.start()
+        // S1-01: 첫 실행이면 권한은 온보딩 2단계 "허용"에서 묻는다. 서비스는 C0 학습을 위해 바로 시작한다
+        if (container.settingsStore.settings.value.onboardingDone) requestPermissionsAndStart() else CopilotService.start(this)
+        val vm = ViewModelProvider(this, CopilotViewModel.Factory(container))[CopilotViewModel::class.java]
         setContent {
             CooldownTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    AppNavigation()
-                }
+                AppRoot(vm, onRequestPermissions = ::requestPermissionsAndStart)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ViewModelProvider(this, CopilotViewModel.Factory(container))[CopilotViewModel::class.java].refreshSeason()
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) container.uxRestrictions.stop()
+        super.onDestroy()
     }
 
     /**
@@ -49,7 +59,6 @@ class MainActivity : ComponentActivity() {
      */
     private fun useScenarioIfRequested() {
         if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
-        val container = (application as CooldownApplication).container
         intent.getStringExtra(EXTRA_SCENARIO)?.let { name ->
             Log.i(TAG, "scenario $name used=${container.useScenario(name)}")
         }

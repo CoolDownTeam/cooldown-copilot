@@ -1,141 +1,105 @@
 package com.pleos.cooldown.presentation.history
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.pleos.cooldown.domain.model.ScoreGrade
-import com.pleos.cooldown.domain.model.TripData
-import com.pleos.cooldown.presentation.theme.*
-import java.time.format.DateTimeFormatter
+import com.pleos.cooldown.domain.report.InterventionKind
+import com.pleos.cooldown.domain.report.TripSummarizer
+import com.pleos.cooldown.presentation.TripItem
+import com.pleos.cooldown.presentation.components.Icon
+import com.pleos.cooldown.presentation.components.LineIcon
+import com.pleos.cooldown.presentation.components.PrimaryButton
+import com.pleos.cooldown.presentation.components.ScreenPadding
+import com.pleos.cooldown.presentation.components.SecondaryButton
+import com.pleos.cooldown.presentation.components.TopBar
+import com.pleos.cooldown.presentation.components.TouchMin
+import com.pleos.cooldown.presentation.theme.CopilotTheme
+import java.time.ZoneId
 
+/** SC-05 기록 (화면 명세 6절). 최근 30회, 누르면 리포트 */
 @Composable
-fun HistoryScreen(
-    onNavigateBack: () -> Unit,
-    viewModel: HistoryViewModel = viewModel()
-) {
-    val state by viewModel.state.collectAsState()
+fun HistoryScreen(trips: List<TripItem>, onOpen: (Long) -> Unit, onClearAll: () -> Unit, onBack: () -> Unit) {
+    val c = CopilotTheme.colors
+    val zone = ZoneId.systemDefault()
+    var confirm by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(24.dp)
-    ) {
-        // 헤더
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onNavigateBack,
-                modifier = Modifier.size(76.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "뒤로",
-                    modifier = Modifier.size(36.dp),
-                    tint = TextPrimary
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Text(
-                text = "주행 기록",
-                style = MaterialTheme.typography.headlineMedium,
-                color = TextPrimary
-            )
+    Column(Modifier.fillMaxSize().padding(ScreenPadding)) {
+        TopBar("기록", onBack)
+        Spacer(Modifier.height(24.dp))
+        if (trips.isEmpty()) {
+            Text("아직 기록이 없어요.", style = MaterialTheme.typography.bodyLarge, color = c.textSecondary)
+            return
         }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 히스토리 목록
-        if (state.trips.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "아직 주행 기록이 없습니다",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextDisabled,
-                    textAlign = TextAlign.Center
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(state.trips) { trip ->
-                    TripCard(trip = trip)
+        LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
+            items(trips, key = { it.trip.id }) { item ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = TouchMin + 16.dp)
+                        .clickable(role = Role.Button) { onOpen(item.trip.id) }
+                        .padding(vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.width(260.dp)) {
+                        Text(TripSummarizer.dateText(item.trip.startMs, zone), style = MaterialTheme.typography.titleLarge, color = c.text)
+                        Text(TripSummarizer.durationText(item.trip.durationMs), style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+                    }
+                    Text(item.headline, style = MaterialTheme.typography.titleLarge, color = c.text, modifier = Modifier.weight(1f))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        kindsOf(item).forEach { (icon, color) -> LineIcon(icon, color, size = 28.dp) }
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    LineIcon(Icon.CHEVRON, c.textMuted, size = 28.dp)
                 }
+                HorizontalDivider(color = c.outline)
+            }
+            item {
+                Spacer(Modifier.height(24.dp))
+                SecondaryButton("기록 전체 삭제", { confirm = true }, color = c.textSecondary)
             }
         }
+    }
+
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text("기록을 모두 지울까요?", style = MaterialTheme.typography.headlineSmall) },
+            text = { Text("주행 리포트가 모두 지워져요. 배운 운전 습관은 그대로예요.", style = MaterialTheme.typography.bodyLarge) },
+            confirmButton = { PrimaryButton("지우기", { confirm = false; onClearAll() }) },
+            dismissButton = { SecondaryButton("취소", { confirm = false }) },
+            containerColor = c.surface,
+        )
     }
 }
 
 @Composable
-private fun TripCard(trip: TripData) {
-    val gradeColor = when (trip.grade) {
-        ScoreGrade.EXCELLENT -> ScoreExcellent
-        ScoreGrade.GOOD -> ScoreGood
-        ScoreGrade.AVERAGE -> ScoreAverage
-        ScoreGrade.POOR -> ScorePoor
-        ScoreGrade.BAD -> ScoreBad
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = SurfaceVariant
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(20.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = trip.startTime.format(DateTimeFormatter.ofPattern("MM월 dd일 HH:mm")),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "${trip.durationMinutes}분 주행",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
-                )
-            }
-
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "${trip.finalScore}점",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = gradeColor
-                )
-                Text(
-                    text = trip.grade.emoji,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = gradeColor
-                )
-            }
-        }
-    }
+private fun kindsOf(item: TripItem) = buildList {
+    val c = CopilotTheme.colors
+    val kinds = item.interventions.map { it.kind }.toSet()
+    if (InterventionKind.COOLDOWN in kinds) add(Icon.SNOWFLAKE to c.cool)
+    if (InterventionKind.FRESH_AIR in kinds || InterventionKind.FATIGUE_HOLD_ON in kinds) add(Icon.WIND to c.warm)
+    if (InterventionKind.FATIGUE_SUGGEST in kinds) add(Icon.COFFEE to c.warm)
 }

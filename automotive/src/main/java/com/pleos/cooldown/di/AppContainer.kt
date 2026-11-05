@@ -15,6 +15,7 @@ import com.pleos.cooldown.data.navi.PleosRouteSource
 import com.pleos.cooldown.data.vehicle.FakeVehicleDataSource
 import com.pleos.cooldown.data.vehicle.PleosVehicleDataSource
 import com.pleos.cooldown.data.vehicle.ScenarioParser
+import com.pleos.cooldown.data.vehicle.UxRestrictionSource
 import com.pleos.cooldown.data.vehicle.VehicleDataSource
 import com.pleos.cooldown.data.voice.PleosVoiceInput
 import com.pleos.cooldown.data.voice.PleosVoiceOutput
@@ -81,6 +82,11 @@ class AppContainer(context: Context) {
 
     private val outsideTemperature = OutsideTemperatureSource(appContext)
 
+    /** 지금 계절 구간 (F2-19). 주행 시작과 홈·설정 화면이 같이 쓴다 */
+    fun currentSeason(): SeasonBand = SeasonBand.of(outsideTemperature.readCelsius(), LocalDate.now().monthValue)
+
+    val uxRestrictions: UxRestrictionSource by lazy { UxRestrictionSource(appContext) }
+
     /** F1·F3가 함께 쓰는 내비 경로 */
     val routeSource: PleosRouteSource by lazy { PleosRouteSource(appContext) }
 
@@ -108,7 +114,7 @@ class AppContainer(context: Context) {
                 }
             },
             scorer = StateScorer(hourOfDay = { ms -> Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).hour }),
-            season = { SeasonBand.of(outsideTemperature.readCelsius(), LocalDate.now().monthValue) },
+            season = ::currentSeason,
             voiceOut = PleosVoiceOutput(appContext),
             voiceIn = PleosVoiceInput(appContext),
             routes = routeSource,

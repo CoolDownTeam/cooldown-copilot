@@ -9,6 +9,8 @@ import com.pleos.cooldown.data.vehicle.VehicleDataSource
 import com.pleos.cooldown.data.voice.VoiceInput
 import com.pleos.cooldown.data.voice.VoiceOutput
 import com.pleos.cooldown.domain.briefing.BriefingAction
+import com.pleos.cooldown.domain.briefing.BriefingComposer
+import com.pleos.cooldown.domain.briefing.HardSectionDetector
 import com.pleos.cooldown.domain.briefing.BriefingPolicy
 import com.pleos.cooldown.domain.cooldown.ComfortLearner
 import com.pleos.cooldown.domain.cooldown.ComfortProfile
@@ -109,6 +111,14 @@ class CopilotRunner(
     /** 설정 화면 "배운 내 취향" 표시용 (F2-07) */
     val comfortProfile: StateFlow<ComfortProfile> = _comfort.asStateFlow()
 
+    private val _freshAir = MutableStateFlow(false)
+    /** F3 ① 바깥 공기로 환기하는 중 (SC-03 "환기하는 중") */
+    val freshAirActive: StateFlow<Boolean> = _freshAir.asStateFlow()
+
+    private val _climateAvailable = MutableStateFlow<Boolean?>(null)
+    /** 공조 제어를 쓸 수 있는지. 권한이 없거나 지원하지 않으면 false, 확인 전이면 null */
+    val climateAvailable: StateFlow<Boolean?> = _climateAvailable.asStateFlow()
+
     private val policy = CooldownPolicy()
     private val fatigue = FatiguePolicy()
     private val freshAir = FreshAirPolicy()
@@ -137,6 +147,7 @@ class CopilotRunner(
         routes.start()
         rootJob = scope.launch {
             hvac.prepare()
+            _climateAvailable.value = hvac.limits() != null
             useEngine(storage.loadBaseline())
             comfort = storage.loadComfort()
             launch { hvac.manualChanges.collect(::onManualChange) }
@@ -171,6 +182,18 @@ class CopilotRunner(
             useEngine(Baseline.DEFAULT)
             comfort = ComfortProfile.DEFAULT
             onDone(true)
+        }
+    }
+
+    /** 홈 "코스 브리핑 · 듣기" (SC-02). 정차 중에만 말한다 */
+    fun replayBriefing() {
+        scope.launch {
+            val route = routes.route.value ?: return@launch
+            if (vehicle.drivingState.value != DrivingState.PARKED || !settings().voiceEnabled) return@launch
+            briefingJob?.cancel()
+            briefingJob = scope.launch {
+                voiceOut.speak(BriefingComposer.briefing(route, HardSectionDetector.detect(route)))
+            }
         }
     }
 
@@ -363,8 +386,14 @@ class CopilotRunner(
                 is FreshAirAction.SetRecirculation -> if (!hvac.setRecirculation(action.on)) {
                     Log.w(TAG, "fresh air switch failed")
                 }
-                is FreshAirAction.Started -> recorder.onFreshAirStarted(action.atMs)
-                is FreshAirAction.Ended -> recorder.onFreshAirEnded(action.atMs, action.yielded)
+                is FreshAirAction.Started -> {
+                    _freshAir.value = true
+                    recorder.onFreshAirStarted(action.atMs)
+                }
+                is FreshAirAction.Ended -> {
+                    _freshAir.value = false
+                    recorder.onFreshAirEnded(action.atMs, action.yielded)
+                }
             }
         }
     }
