@@ -23,6 +23,10 @@ object TripSummarizer {
     /** 평소와 이만큼 차이 나면 "차분"·"바쁨"으로 본다 (점수 단위) */
     const val HEADLINE_MARGIN = 6
 
+    /** 평소 회복 시간과 비교하려면 지난 쿨다운 기록이 이만큼 있어야 한다 */
+    const val RECOVERY_COMPARE_MIN = 3
+    const val RECOVERY_MARGIN_MS = 60_000L
+
     /** 비교할 지난 주행이 없을 때 기준. 기준선과 같은 운전이 20점 안팎이다 */
     const val FIRST_TRIP_REFERENCE = 20
 
@@ -53,6 +57,24 @@ object TripSummarizer {
         val head = if (minutes != null && record.result in timedResults) "$clock · $minutes" else clock
         return "$head — ${sentence(record)}"
     }
+
+    /**
+     * 개입 효과 한 줄: 쿨다운 뒤 차분해지기까지 걸린 시간의 평균.
+     * 지난 기록이 있으면 평소와 비교한다. 쿨다운이 없었거나 측정하지 못했으면 null
+     */
+    fun recoveryText(interventions: List<InterventionRecord>, previous: List<InterventionRecord> = emptyList()): String? {
+        val now = recoveries(interventions).takeIf { it.isNotEmpty() }?.average() ?: return null
+        val text = "시원하게 해 드린 뒤 평균 ${minutesText(now.toLong())} 만에 차분해졌어요"
+        val usual = recoveries(previous).takeIf { it.size >= RECOVERY_COMPARE_MIN }?.average() ?: return text
+        return when {
+            now <= usual - RECOVERY_MARGIN_MS -> "$text (평소보다 빨라요)"
+            now >= usual + RECOVERY_MARGIN_MS -> "$text (평소보다 오래 걸렸어요)"
+            else -> text
+        }
+    }
+
+    private fun recoveries(list: List<InterventionRecord>) =
+        list.filter { it.kind == InterventionKind.COOLDOWN }.mapNotNull { it.recoveryMs }
 
     /** 홈 "지난 주행" 카드의 개입 요약 한 줄 */
     fun interventionSummary(interventions: List<InterventionRecord>): String {

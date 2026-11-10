@@ -65,6 +65,9 @@ fun ReportScreen(ui: ReportUi?, onClose: () -> Unit) {
                             Text(line, style = MaterialTheme.typography.bodyLarge, color = c.text)
                         }
                     }
+                    ui.recoveryText?.let {
+                        Text(it, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+                    }
                 }
             },
             secondary = {

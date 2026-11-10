@@ -49,6 +49,8 @@ data class InterventionEntity(
     /** DONE / COLD / STOPPED / YIELDED / FAILED / ACCEPTED / DECLINED / RESTED */
     val outcome: String,
     val levelChange: Int,
+    /** v3: 쿨다운 뒤 차분해지기까지 걸린 시간 */
+    val recoveryMs: Long? = null,
 )
 
 @Dao
@@ -119,7 +121,7 @@ private fun TripEntity.toRecord() = TripRecord(
 
 private fun InterventionRecord.toEntity(tripId: Long) = InterventionEntity(
     tripId = tripId, startMs = startMs, endMs = endMs, kind = kind.name,
-    maxStage = maxStage, outcome = result.name, levelChange = levelChange,
+    maxStage = maxStage, outcome = result.name, levelChange = levelChange, recoveryMs = recoveryMs,
 )
 
 private fun InterventionEntity.toRecord() = InterventionRecord(
@@ -128,4 +130,5 @@ private fun InterventionEntity.toRecord() = InterventionRecord(
     maxStage = maxStage,
     result = InterventionResult.entries.firstOrNull { it.name == outcome } ?: InterventionResult.DONE,
     levelChange = levelChange,
+    recoveryMs = recoveryMs,
 )

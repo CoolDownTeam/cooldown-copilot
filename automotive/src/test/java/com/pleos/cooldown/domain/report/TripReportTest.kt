@@ -133,4 +133,47 @@ class TripReportTest {
         assertEquals(false, TripSummarizer.shouldAutoShow(trip(20, durationMs = 4 * 60_000L)))
         assertEquals("1시간 5분", TripSummarizer.durationText(65 * 60_000L))
     }
+
+    @Test
+    fun `recovery time is measured from cooldown start to the first calm score`() {
+        val r = TripRecorder()
+        r.start(t0, odometerKm = null)
+        r.onState(state(t0 + 1_000, aggression = 70))
+        r.onCooldownStarted(t0 + 2_000)
+        r.onState(state(t0 + 60_000, aggression = 55))
+        r.onState(state(t0 + 182_000, aggression = 35))
+        r.onState(state(t0 + 300_000, aggression = 20))
+        r.onCooldownEnded(t0 + 400_000, InterventionOutcome.RESTORED, maxStage = 1)
+
+        val cooldown = r.finish(t0 + 600_000, null, learning = false, learnedTrips = 6)?.interventions?.single()
+        assertEquals(180_000L, cooldown?.recoveryMs)
+    }
+
+    @Test
+    fun `no recovery is recorded when the score never comes down during the cooldown`() {
+        val r = TripRecorder()
+        r.start(t0, odometerKm = null)
+        r.onCooldownStarted(t0)
+        r.onState(state(t0 + 60_000, aggression = 70))
+        r.onCooldownEnded(t0 + 120_000, InterventionOutcome.COLD_FEEDBACK, maxStage = 1)
+        r.onState(state(t0 + 180_000, aggression = 10))
+
+        assertNull(r.finish(t0 + 300_000, null, false, 6)?.interventions?.single()?.recoveryMs)
+    }
+
+    @Test
+    fun `recovery text averages cooldowns and compares with the usual`() {
+        fun cooldown(recoveryMs: Long?) = InterventionRecord(t0, t0 + 300_000, InterventionKind.COOLDOWN, 1, InterventionResult.DONE, recoveryMs = recoveryMs)
+        val fresh = InterventionRecord(t0, t0 + 300_000, InterventionKind.FRESH_AIR, 1, InterventionResult.DONE)
+
+        assertNull(TripSummarizer.recoveryText(listOf(fresh)))
+        assertNull(TripSummarizer.recoveryText(listOf(cooldown(null))))
+        assertEquals("시원하게 해 드린 뒤 평균 3분 만에 차분해졌어요", TripSummarizer.recoveryText(listOf(cooldown(120_000), cooldown(240_000))))
+
+        val usual = List(3) { cooldown(360_000) }
+        assertEquals("시원하게 해 드린 뒤 평균 3분 만에 차분해졌어요 (평소보다 빨라요)", TripSummarizer.recoveryText(listOf(cooldown(180_000)), usual))
+        assertEquals("시원하게 해 드린 뒤 평균 6분 만에 차분해졌어요", TripSummarizer.recoveryText(listOf(cooldown(330_000)), usual))
+        // 지난 기록이 3개보다 적으면 비교하지 않는다
+        assertEquals("시원하게 해 드린 뒤 평균 3분 만에 차분해졌어요", TripSummarizer.recoveryText(listOf(cooldown(180_000)), usual.take(2)))
+    }
 }

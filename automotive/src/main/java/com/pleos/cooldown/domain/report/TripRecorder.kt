@@ -42,12 +42,20 @@ class TripRecorder(private val calmBelow: Int = CALM_BELOW) {
         fatigueSum += state.fatigue
         maxAggression = maxOf(maxAggression, state.aggression)
         maxFatigue = maxOf(maxFatigue, state.fatigue)
+        markRecovery(state)
         if (state.aggression < calmBelow) {
             val since = calmSinceMs ?: state.timestampMs.also { calmSinceMs = it }
             longestCalmMs = maxOf(longestCalmMs, state.timestampMs - since)
         } else {
             calmSinceMs = null
         }
+    }
+
+    /** 진행 중인 쿨다운에서 공격성이 처음 차분 기준 아래로 내려온 시점을 남긴다 */
+    private fun markRecovery(state: DriverState) {
+        val cooldown = open[InterventionKind.COOLDOWN] ?: return
+        if (cooldown.recoveryMs != null || state.aggression >= calmBelow || state.timestampMs < cooldown.startMs) return
+        open[InterventionKind.COOLDOWN] = cooldown.copy(recoveryMs = state.timestampMs - cooldown.startMs)
     }
 
     fun onRouteSeen() {

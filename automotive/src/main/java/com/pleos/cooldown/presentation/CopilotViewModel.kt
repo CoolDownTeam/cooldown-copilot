@@ -55,6 +55,8 @@ data class ReportUi(
     val thirdLabel: String,
     val thirdValue: String,
     val timeline: List<String>,
+    /** 개입 효과 한 줄. 쿨다운이 없었으면 null */
+    val recoveryText: String?,
     /** 오래된 것부터, 이번 주행이 [highlight] */
     val aggressionTrend: List<Int>,
     val fatigueTrend: List<Int>,
@@ -181,6 +183,10 @@ class CopilotViewModel(private val container: AppContainer) : ViewModel() {
                 thirdLabel = label,
                 thirdValue = value,
                 timeline = TripSummarizer.timeline(record.interventions, zone),
+                recoveryText = TripSummarizer.recoveryText(
+                    record.interventions,
+                    container.tripRepository.interventionsOf(older.map { it.id }).first().values.flatten(),
+                ),
                 aggressionTrend = trend.map { it.avgAggression },
                 fatigueTrend = trend.map { it.avgFatigue },
                 highlight = trend.lastIndex,

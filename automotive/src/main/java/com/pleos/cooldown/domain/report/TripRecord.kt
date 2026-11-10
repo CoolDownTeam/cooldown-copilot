@@ -29,6 +29,11 @@ data class InterventionRecord(
     val result: InterventionResult,
     /** 이 개입 뒤 F2 강도가 바뀐 만큼 (−1이면 "다음엔 덜 차갑게 할게요") */
     val levelChange: Int = 0,
+    /**
+     * 쿨다운을 시작하고 공격성이 차분 기준 아래로 처음 내려오기까지 걸린 시간 (개입 효과).
+     * 쿨다운이 아니거나 개입이 끝날 때까지 내려오지 않았으면 null
+     */
+    val recoveryMs: Long? = null,
 ) {
     val durationMs: Long? get() = endMs?.let { it - startMs }
 }
