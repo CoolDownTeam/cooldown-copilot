@@ -42,7 +42,7 @@
 |---|---|
 | SAFE-01 | 주행 중 화면에는 입력 UI(버튼, 스크롤, 입력란)를 표시하지 않는다 |
 | SAFE-02 | 주행 중 음성은 한 번에 한 문장, 20자 안팎으로 한다. 코스 브리핑(최대 30초)은 정차 중에만 재생한다 |
-| SAFE-03 | 운전자가 직접 조작한 차량 설정은 언제나 앱보다 우선한다 |
+| SAFE-03 | 운전자가 직접 조작한 차량 설정은 언제나 앱보다 우선한다. 풍향은 변경 리스너가 없어서 주행 중 2초마다 다시 읽어 조작을 알아챈다. 앞유리 김서림 제거(DEFROST)가 켜져 있으면 F2·F3 모두 풍향을 바꾸지 않는다 (2026-11-10 보안 점검에서 찾은 결함 수정) |
 | SAFE-04 | 지원하지 않는 차량 기능은 `checkXXXCapabilities`로 미리 확인해서, 해당 기능을 조용히 끈다 |
 | SAFE-05 | 주행 데이터는 차량 밖으로 보내지 않는다. 원시 센서 로그는 저장하지 않고, 주행별 요약과 기준선만 저장한다 |
 | SAFE-06 | 앱 카테고리는 게임으로 두지 않는다. 심사 가이드상 게임은 미디어 앱으로 분류되어 주행 중에 실행할 수 없다 |
@@ -578,6 +578,7 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
     val maxStage: Int,
     val outcome: String,   // DONE / COLD / STOPPED / YIELDED / FAILED / ACCEPTED / DECLINED / RESTED
     val levelChange: Int,  // 이 개입 뒤 F2 강도 변화. −1이면 "다음엔 덜 차갑게 할게요"
+    val recoveryMs: Long?, // v3: 쿨다운 시작부터 공격성이 40 아래로 처음 내려오기까지. 리포트에 "평균 N분 만에 차분해졌어요" (지난 쿨다운 3건 이상이면 평소와 비교)
 )
 @Entity data class BaselineEntity(
     @PrimaryKey val id: Int = 0, val json: String, val totalTrips: Int, val totalMinutes: Double,
