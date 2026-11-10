@@ -5,11 +5,11 @@ import kotlin.math.abs
 enum class FanDirection { FACE, FLOOR, DEFROST }
 
 /**
- * 개입 중 풍향. 운전자가 앞유리 김서림 제거(DEFROST)를 켜 두었으면 시야가 우선이라 바꾸지 않는다 (SAFE-03).
- * [wanted]가 null이면 지금 풍향을 그대로 둔다.
+ * 개입 중 풍향. 운전자가 앞유리 김서림 제거(DEFROST)를 켜 두었거나 지금 풍향을 알 수 없으면
+ * 시야가 우선이라 바꾸지 않는다 (SAFE-03). [wanted]가 null이면 지금 풍향을 그대로 둔다.
  */
 fun interventionDirection(current: FanDirection?, wanted: FanDirection?): FanDirection? =
-    if (current == FanDirection.DEFROST) current else wanted ?: current
+    if (current == null || current == FanDirection.DEFROST) current else wanted ?: current
 
 /** 운전석 공조의 현재 값. 차량이 지원하지 않는 항목은 null */
 data class HvacSnapshot(
@@ -100,6 +100,16 @@ class ManualChangeDetector(private val echoWindowMs: Long = 2_000) {
         if (previous == null || value == previous) return null
         if (isEcho(nowMs) { it.fanDirection == value }) return null
         return ManualChange.DIRECTION
+    }
+
+    /**
+     * 풍향을 읽지 못했다. SDK가 모르는 값(예: VHAL의 DEFROST 4, 김서림+바닥 6)이면 결과가 오지 않는다.
+     * 알던 풍향이 갑자기 읽히지 않으면 운전자가 바꾼 것으로 보고 양보한다 (안전한 쪽).
+     */
+    fun onFanDirectionUnknown(): ManualChange? {
+        val previous = lastDirection
+        lastDirection = null
+        return if (previous != null) ManualChange.DIRECTION else null
     }
 
     fun onSeatVentilation(nowMs: Long, value: Int): ManualChange? {

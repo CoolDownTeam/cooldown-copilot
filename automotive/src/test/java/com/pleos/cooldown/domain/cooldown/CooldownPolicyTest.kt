@@ -382,5 +382,18 @@ class CooldownPolicyTest {
         assertEquals(FanDirection.FACE, interventionDirection(FanDirection.FLOOR, FanDirection.FACE))
         assertEquals(FanDirection.FLOOR, interventionDirection(FanDirection.FLOOR, null))
         assertNull(interventionDirection(null, null))
+        // 풍향을 알 수 없으면 바꾸지 않는다
+        assertNull(interventionDirection(null, FanDirection.FACE))
+    }
+
+    @Test
+    fun `an unreadable fan direction after a known one counts as the driver's change`() {
+        val detector = ManualChangeDetector()
+        assertNull(detector.onFanDirectionUnknown())
+        detector.onFanDirection(0, FanDirection.FLOOR)
+
+        assertEquals(ManualChange.DIRECTION, detector.onFanDirectionUnknown())
+        assertNull(detector.onFanDirectionUnknown())
+        assertNull(detector.onFanDirection(5_000, FanDirection.FLOOR))
     }
 }

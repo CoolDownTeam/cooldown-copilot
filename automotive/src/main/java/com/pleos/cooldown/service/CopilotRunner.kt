@@ -140,6 +140,7 @@ class CopilotRunner(
 
     private var rootJob: Job? = null
     private var tripJob: Job? = null
+    private var fanRefreshJob: Job? = null
     private var tripEndJob: Job? = null
 
     fun start() {
@@ -298,7 +299,10 @@ class CopilotRunner(
             e.onSample(now, vehicle.signal.value)
             if (++samples % config.samplesPerTick == 0) {
                 e.tick(now)
-                if ((samples / config.samplesPerTick) % config.fanDirectionRefreshTicks == 0) hvac.refreshFanDirection()
+                // 따로 띄워서, SDK가 답하지 않아도(최대 3초) 샘플링이 멈추지 않게 한다
+                if ((samples / config.samplesPerTick) % config.fanDirectionRefreshTicks == 0 && fanRefreshJob?.isActive != true) {
+                    fanRefreshJob = scope.launch { hvac.refreshFanDirection() }
+                }
                 val driver = e.state.value
                 recorder.onState(driver)
                 val route = routes.route.value

@@ -228,9 +228,10 @@ class PleosHvacController(
         val v = vehicle ?: return
         val area = fanDirectionArea ?: return
         val value = request<FanDirectionType?>("fan direction value") { ok, fail -> v.getHVAC().getHvacFanDirection(area, ok, fail) }
-            ?.toDomain() ?: return
+            ?.toDomain()
         fanDirection = value
-        detector.onFanDirection(clock.nowMs(), value)?.let(_manualChanges::tryEmit)
+        val change = if (value == null) detector.onFanDirectionUnknown() else detector.onFanDirection(clock.nowMs(), value)
+        change?.let(_manualChanges::tryEmit)
         publish()
     }
 
