@@ -89,6 +89,8 @@ class CopilotRunner(
         val listenWindowMs: Long = 8_000,
         /** 경로·휴게소 정보(TBT)를 다시 요청하는 간격 (틱 단위) */
         val restAreaRefreshTicks: Int = 10,
+        /** 풍향을 다시 읽는 간격 (틱). 풍향은 변경 리스너가 없다 */
+        val fanDirectionRefreshTicks: Int = 2,
     )
 
     private val _driverState = MutableStateFlow(DriverState.IDLE)
@@ -296,6 +298,7 @@ class CopilotRunner(
             e.onSample(now, vehicle.signal.value)
             if (++samples % config.samplesPerTick == 0) {
                 e.tick(now)
+                if ((samples / config.samplesPerTick) % config.fanDirectionRefreshTicks == 0) hvac.refreshFanDirection()
                 val driver = e.state.value
                 recorder.onState(driver)
                 val route = routes.route.value

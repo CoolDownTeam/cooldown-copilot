@@ -236,4 +236,24 @@ class FatiguePolicyTest {
         assertEquals("1km 앞 휴게소에서 잠깐 쉬어 갈까요?", FatiguePolicy.suggestMessage(RestArea("", 400.0)))
         assertEquals("13km 앞 망향휴게소에서 잠깐 쉬어 갈까요?", FatiguePolicy.suggestMessage(RestArea("망향휴게소", 12_600.0)))
     }
+
+    @Test
+    fun `SAFE-03 holding on keeps the driver's defrost`() {
+        hvac = hvac.copy(fanDirection = FanDirection.DEFROST)
+        run(60, fatigue = 65)
+
+        assertEquals(FatiguePhase.HOLD_ON, policy.phase)
+        assertEquals(FanDirection.DEFROST, hvac.fanDirection)
+        assertEquals(4, hvac.fanSpeed)
+    }
+
+    @Test
+    fun `SAFE-03 a fan direction change while holding yields the climate`() {
+        run(60, fatigue = 65)
+
+        apply(policy.onManualChange(nowMs, ManualChange.DIRECTION))
+
+        assertFalse(policy.holdingClimate)
+        assertEquals(FatigueAction.Outcome.YIELDED, actions.filterIsInstance<FatigueAction.InterventionEnded>().single().outcome)
+    }
 }

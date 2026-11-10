@@ -174,7 +174,7 @@ class CooldownPolicy(private val config: Config = Config()) {
         val target = HvacTarget(
             temperatureC = targetTemp(hvac.temperatureC, p.stage1DropC, p, l),
             fanSpeed = min(hvac.fanSpeed + 1, l.maxFanSpeed),
-            fanDirection = if (p.faceDirection && l.supportsFaceDirection) FanDirection.FACE else hvac.fanDirection,
+            fanDirection = interventionDirection(hvac.fanDirection, FanDirection.FACE.takeIf { p.faceDirection && l.supportsFaceDirection }),
             seatVentilation = hvac.seatVentilation,
         )
         phase = CooldownPhase.STAGE1

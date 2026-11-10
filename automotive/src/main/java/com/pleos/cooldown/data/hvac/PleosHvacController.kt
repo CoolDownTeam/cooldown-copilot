@@ -170,8 +170,9 @@ class PleosHvacController(
         request<Map<SeatArea, List<FanDirectionType>>>("fan direction") { ok, fail -> hvac.checkHvacFanDirectionCapabilities(ok, fail) }
             ?.keys?.driverArea()?.let { a ->
                 fanDirectionArea = a
-                // 풍향은 변경 리스너가 없어서 한 번 읽는다
-                fanDirection = request<FanDirectionType?>("fan direction value") { ok, fail -> hvac.getHvacFanDirection(a, ok, fail) }?.toDomain()
+                // 풍향은 변경 리스너가 없어서 여기서 한 번 읽고, 그 뒤로는 refreshFanDirection으로 다시 읽는다
+                fanDirection = request<FanDirectionType?>("fan direction value") { ok, fail -> hvac.getHvacFanDirection(a, ok, fail) }
+                    ?.toDomain()?.also { detector.onFanDirection(clock.nowMs(), it) }
                 publish()
             }
         request<Map<SeatArea, AreaBounds<*>>>("seat ventilation") { ok, fail -> v.getSeat().checkSeatVentilationCapabilities(ok, fail) }
@@ -223,6 +224,16 @@ class PleosHvacController(
         vehicle = null
     }
 
+    override suspend fun refreshFanDirection() {
+        val v = vehicle ?: return
+        val area = fanDirectionArea ?: return
+        val value = request<FanDirectionType?>("fan direction value") { ok, fail -> v.getHVAC().getHvacFanDirection(area, ok, fail) }
+            ?.toDomain() ?: return
+        fanDirection = value
+        detector.onFanDirection(clock.nowMs(), value)?.let(_manualChanges::tryEmit)
+        publish()
+    }
+
     override suspend fun limits(): HvacLimits? {
         val v = vehicle ?: return null
         val hvac = v.getHVAC()
@@ -272,6 +283,8 @@ class PleosHvacController(
         if (direction != null && direction != current?.fanDirection && directionArea != null) {
             if (!set { ok, fail -> hvac.setHvacFanDirection(directionArea, direction.toSdk(), { _, _ -> ok() }, fail) }) return false
             fanDirection = direction
+            // 다음에 다시 읽을 때 앱이 바꾼 값을 운전자 조작으로 보지 않게 한다
+            detector.onFanDirection(clock.nowMs(), direction)
             publish()
         }
         val seat = target.seatVentilation

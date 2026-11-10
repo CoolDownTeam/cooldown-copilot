@@ -24,6 +24,12 @@ interface HvacController {
     /** 지원 범위를 확인하고 값 구독을 건다. [start] 뒤, 첫 주행 전에 한 번 부른다 */
     suspend fun prepare() = Unit
 
+    /**
+     * 풍향을 차량에서 다시 읽는다. 풍향은 변경 리스너가 없어서 주기적으로 불러야 운전자의 조작을 알 수 있다
+     * (SAFE-03). 바뀌었으면 [snapshot]을 갱신하고 [manualChanges]로 알린다
+     */
+    suspend fun refreshFanDirection() = Unit
+
     /** SAFE-04: 지원 범위. 온도·풍량을 지원하지 않으면 null */
     suspend fun limits(): HvacLimits?
 

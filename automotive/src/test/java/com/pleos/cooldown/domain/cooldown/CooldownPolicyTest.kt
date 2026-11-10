@@ -337,4 +337,50 @@ class CooldownPolicyTest {
 
         assertEquals(ManualChange.TEMP_DOWN, detector.onTemperature(4_000, 23f))
     }
+
+    @Test
+    fun `SAFE-03 winter keeps the driver's defrost instead of turning air to the face`() {
+        hvac = hvac.copy(fanDirection = FanDirection.DEFROST)
+        start(band = SeasonBand.WINTER, level = 1)
+        run(30, aggression = 70)
+
+        assertEquals(CooldownPhase.STAGE1, policy.phase)
+        assertEquals(FanDirection.DEFROST, hvac.fanDirection)
+        assertEquals(4, hvac.fanSpeed)
+    }
+
+    @Test
+    fun `SAFE-03 driver changing the fan direction mid intervention yields without restoring`() {
+        start(band = SeasonBand.WINTER, level = 1)
+        run(30, aggression = 70)
+        hvac = hvac.copy(fanDirection = FanDirection.DEFROST)
+
+        apply(policy.onManualChange(nowMs, ManualChange.DIRECTION))
+
+        assertEquals(CooldownPhase.YIELDED, policy.phase)
+        assertEquals(FanDirection.DEFROST, hvac.fanDirection)
+        assertEquals(1, actionsOf<CooldownAction.ApplyHvac>().size)
+    }
+
+    @Test
+    fun `fan direction polling ignores the app's own write and catches the driver's change`() {
+        val detector = ManualChangeDetector()
+        assertNull(detector.onFanDirection(0, FanDirection.FLOOR))
+
+        // 앱이 FACE로 바꾸면 컨트롤러가 바로 detector에 알린다 (echo)
+        detector.onAppSet(1_000, HvacTarget(24f, 4, fanDirection = FanDirection.FACE))
+        assertNull(detector.onFanDirection(1_000, FanDirection.FACE))
+        // 몇 초 뒤 다시 읽어도 같은 값이면 조작이 아니다
+        assertNull(detector.onFanDirection(5_000, FanDirection.FACE))
+        // 운전자가 김서림 제거로 바꾸면 조작이다
+        assertEquals(ManualChange.DIRECTION, detector.onFanDirection(7_000, FanDirection.DEFROST))
+    }
+
+    @Test
+    fun `intervention direction keeps defrost and otherwise uses the wanted direction`() {
+        assertEquals(FanDirection.DEFROST, interventionDirection(FanDirection.DEFROST, FanDirection.FACE))
+        assertEquals(FanDirection.FACE, interventionDirection(FanDirection.FLOOR, FanDirection.FACE))
+        assertEquals(FanDirection.FLOOR, interventionDirection(FanDirection.FLOOR, null))
+        assertNull(interventionDirection(null, null))
+    }
 }

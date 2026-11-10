@@ -4,6 +4,13 @@ import kotlin.math.abs
 
 enum class FanDirection { FACE, FLOOR, DEFROST }
 
+/**
+ * 개입 중 풍향. 운전자가 앞유리 김서림 제거(DEFROST)를 켜 두었으면 시야가 우선이라 바꾸지 않는다 (SAFE-03).
+ * [wanted]가 null이면 지금 풍향을 그대로 둔다.
+ */
+fun interventionDirection(current: FanDirection?, wanted: FanDirection?): FanDirection? =
+    if (current == FanDirection.DEFROST) current else wanted ?: current
+
 /** 운전석 공조의 현재 값. 차량이 지원하지 않는 항목은 null */
 data class HvacSnapshot(
     val temperatureC: Float,

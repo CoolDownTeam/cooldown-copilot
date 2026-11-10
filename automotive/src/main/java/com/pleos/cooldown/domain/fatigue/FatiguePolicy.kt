@@ -1,6 +1,7 @@
 package com.pleos.cooldown.domain.fatigue
 
 import com.pleos.cooldown.domain.cooldown.FanDirection
+import com.pleos.cooldown.domain.cooldown.interventionDirection
 import com.pleos.cooldown.domain.cooldown.HvacLimits
 import com.pleos.cooldown.domain.cooldown.HvacSnapshot
 import com.pleos.cooldown.domain.cooldown.HvacTarget
@@ -218,7 +219,7 @@ class FatiguePolicy(private val config: Config = Config()) {
         val target = HvacTarget(
             temperatureC = min(hvac.temperatureC, max(hvac.temperatureC - 1f, maxOf(config.absoluteMinTempC, l.minTempC))),
             fanSpeed = min(hvac.fanSpeed + 1, l.maxFanSpeed),
-            fanDirection = if (l.supportsFaceDirection) FanDirection.FACE else hvac.fanDirection,
+            fanDirection = interventionDirection(hvac.fanDirection, FanDirection.FACE.takeIf { l.supportsFaceDirection }),
             seatVentilation = hvac.seatVentilation,
         )
         return buildList {
