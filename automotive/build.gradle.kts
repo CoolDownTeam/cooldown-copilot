@@ -85,3 +85,11 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
+
+// 공모전 제출용 APK를 저장소 루트 submission/CoolDownCopilot.apk로 복사한다 (*.apk는 gitignore)
+tasks.register<Copy>("exportSubmissionApk") {
+    dependsOn("assembleDebug")
+    from(layout.buildDirectory.dir("outputs/apk/debug")) { include("*-debug.apk") }
+    rename { "CoolDownCopilot.apk" }
+    into(rootProject.layout.projectDirectory.dir("submission"))
+}

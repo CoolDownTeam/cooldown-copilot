@@ -23,6 +23,7 @@ class TripRecorder(private val calmBelow: Int = CALM_BELOW) {
     private var routeSeen = false
     private var hardSections = 0
     private var lastFatiguePhase = FatiguePhase.DISABLED
+    private var recoveryCalmSinceMs: Long? = null
 
     private val closed = mutableListOf<InterventionRecord>()
     private val open = mutableMapOf<InterventionKind, InterventionRecord>()
@@ -51,11 +52,21 @@ class TripRecorder(private val calmBelow: Int = CALM_BELOW) {
         }
     }
 
-    /** 진행 중인 쿨다운에서 공격성이 처음 차분 기준 아래로 내려온 시점을 남긴다 */
+    /**
+     * 진행 중인 쿨다운에서 공격성이 차분 기준 아래로 내려와 [RECOVERY_HOLD_MS] 동안 유지되면,
+     * 그 차분이 시작된 시점까지를 회복 시간으로 남긴다. 거친 운전 중 잠깐 내려간 순간은 세지 않는다.
+     */
     private fun markRecovery(state: DriverState) {
         val cooldown = open[InterventionKind.COOLDOWN] ?: return
-        if (cooldown.recoveryMs != null || state.aggression >= calmBelow || state.timestampMs < cooldown.startMs) return
-        open[InterventionKind.COOLDOWN] = cooldown.copy(recoveryMs = state.timestampMs - cooldown.startMs)
+        if (cooldown.recoveryMs != null || state.timestampMs < cooldown.startMs) return
+        if (state.aggression >= calmBelow) {
+            recoveryCalmSinceMs = null
+            return
+        }
+        val since = recoveryCalmSinceMs ?: state.timestampMs.also { recoveryCalmSinceMs = it }
+        if (state.timestampMs - since >= RECOVERY_HOLD_MS) {
+            open[InterventionKind.COOLDOWN] = cooldown.copy(recoveryMs = since - cooldown.startMs)
+        }
     }
 
     fun onRouteSeen() {
@@ -157,6 +168,7 @@ class TripRecorder(private val calmBelow: Int = CALM_BELOW) {
 
     private fun openRecord(atMs: Long, kind: InterventionKind) {
         if (!active || kind in open) return
+        if (kind == InterventionKind.COOLDOWN) recoveryCalmSinceMs = null
         open[kind] = InterventionRecord(atMs, null, kind, maxStage = 0, result = InterventionResult.DONE)
     }
 
@@ -177,6 +189,7 @@ class TripRecorder(private val calmBelow: Int = CALM_BELOW) {
         longestCalmMs = 0
         routeSeen = false
         hardSections = 0
+        recoveryCalmSinceMs = null
         closed.clear()
         open.clear()
     }
@@ -184,5 +197,8 @@ class TripRecorder(private val calmBelow: Int = CALM_BELOW) {
     companion object {
         /** F2·F3의 "평온" 기준과 같다 */
         const val CALM_BELOW = 40
+
+        /** 회복으로 보려면 차분이 이만큼 이어져야 한다 */
+        const val RECOVERY_HOLD_MS = 2 * 60_000L
     }
 }

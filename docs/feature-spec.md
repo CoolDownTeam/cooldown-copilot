@@ -578,7 +578,7 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
     val maxStage: Int,
     val outcome: String,   // DONE / COLD / STOPPED / YIELDED / FAILED / ACCEPTED / DECLINED / RESTED
     val levelChange: Int,  // 이 개입 뒤 F2 강도 변화. −1이면 "다음엔 덜 차갑게 할게요"
-    val recoveryMs: Long?, // v3: 쿨다운 시작부터 공격성이 40 아래로 처음 내려오기까지. 리포트에 "평균 N분 만에 차분해졌어요" (지난 쿨다운 3건 이상이면 평소와 비교)
+    val recoveryMs: Long?, // v3: 쿨다운 시작부터 공격성이 40 아래로 내려와 2분 넘게 유지되기 시작한 때까지. 리포트에 "평균 N분 만에 차분해졌어요" (지난 쿨다운 3건 이상이면 평소와 비교)
 )
 @Entity data class BaselineEntity(
     @PrimaryKey val id: Int = 0, val json: String, val totalTrips: Int, val totalMinutes: Double,

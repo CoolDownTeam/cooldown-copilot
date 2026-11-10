@@ -20,3 +20,6 @@ build/
 *.jks
 *.keystore
 /.claude/settings.local.json
+
+# 공모전 제출물 (APK·영상)
+/submission/

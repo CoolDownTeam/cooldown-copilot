@@ -135,14 +135,17 @@ class TripReportTest {
     }
 
     @Test
-    fun `recovery time is measured from cooldown start to the first calm score`() {
+    fun `recovery time is measured from cooldown start to the start of a sustained calm`() {
         val r = TripRecorder()
         r.start(t0, odometerKm = null)
         r.onState(state(t0 + 1_000, aggression = 70))
         r.onCooldownStarted(t0 + 2_000)
+        // 거친 운전 중 잠깐 내려간 순간은 세지 않는다
+        r.onState(state(t0 + 30_000, aggression = 35))
         r.onState(state(t0 + 60_000, aggression = 55))
         r.onState(state(t0 + 182_000, aggression = 35))
-        r.onState(state(t0 + 300_000, aggression = 20))
+        r.onState(state(t0 + 250_000, aggression = 30))
+        r.onState(state(t0 + 302_000, aggression = 20))
         r.onCooldownEnded(t0 + 400_000, InterventionOutcome.RESTORED, maxStage = 1)
 
         val cooldown = r.finish(t0 + 600_000, null, learning = false, learnedTrips = 6)?.interventions?.single()
