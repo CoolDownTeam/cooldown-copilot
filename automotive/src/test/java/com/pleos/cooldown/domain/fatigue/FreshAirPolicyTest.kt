@@ -1,6 +1,8 @@
 package com.pleos.cooldown.domain.fatigue
 
+import com.pleos.cooldown.domain.cooldown.HvacLimits
 import com.pleos.cooldown.domain.cooldown.HvacSnapshot
+import com.pleos.cooldown.domain.model.DriverState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -118,5 +120,30 @@ class FreshAirPolicyTest {
         actions += policy.endTrip(nowMs)
 
         assertEquals(listOf(false, true), switches())
+    }
+
+    @Test
+    fun `hold-on starting during fresh air restores recirculation when it ends`() {
+        policy.startTrip(occupantCount = 3)
+        run(15 * 60)
+        val fatigue = FatiguePolicy().apply { startTrip(HvacLimits(16f, 32f, 8, true, 3)) }
+        val tired = DriverState.IDLE.copy(fatigue = 90, continuousDrivingMs = 60 * 60_000L)
+        repeat(61) {
+            nowMs += 1_000
+            fatigue.onTick(nowMs, tired, policy.driverSet(hvac), cooldownActive = false, restArea = null, nextTurnM = null)
+        }
+        run(1, suspended = fatigue.holdingClimate)
+
+        val restore = fatigue.endTrip(nowMs).filterIsInstance<FatigueAction.SetRecirculation>()
+
+        assertEquals(listOf(FatigueAction.SetRecirculation(on = true)), restore)
+    }
+
+    @Test
+    fun `driver-set state is the snapshot itself outside fresh air`() {
+        policy.startTrip(occupantCount = 1)
+        val outside = hvac.copy(recirculation = false)
+
+        assertEquals(outside, policy.driverSet(outside))
     }
 }

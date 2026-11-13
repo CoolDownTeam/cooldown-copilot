@@ -14,6 +14,8 @@ object TripSummarizer {
     const val HEADLINE_CALM = "평소보다 차분한 주행이었어요"
     const val HEADLINE_SIMILAR = "평소와 비슷했어요"
     const val HEADLINE_BUSY = "오늘은 조금 바빴네요"
+    /** 피로 케어가 개입한 주행. 공격성이 낮아도 "차분한 주행"이라고 하지 않는다 */
+    const val HEADLINE_TIRED = "오늘은 조금 피곤하셨던 것 같아요"
 
     /** 리포트를 자동으로 띄우는 최소 주행 시간 (명세 7.1) */
     const val AUTO_SHOW_MIN_MS = 5 * 60_000L
@@ -33,8 +35,12 @@ object TripSummarizer {
     private val clockFormat = DateTimeFormatter.ofPattern("HH:mm")
     private val dateFormat = DateTimeFormatter.ofPattern("M월 d일 HH:mm")
 
-    /** [previous]는 이번 주행 이전 기록 (최근 것부터) */
-    fun headline(trip: TripRecord, previous: List<TripRecord>): String {
+    /**
+     * [previous]는 이번 주행 이전 기록 (최근 것부터). 피로 케어(졸음 케어·휴게소 제안)가 있었으면 피로를 먼저 말한다.
+     * 피로 케어는 피로가 기준을 1분 넘게 넘어야 시작하므로 순간값(maxFatigue)보다 오탐이 적다
+     */
+    fun headline(trip: TripRecord, previous: List<TripRecord>, interventions: List<InterventionRecord> = emptyList()): String {
+        if (interventions.any { it.kind in fatigueKinds }) return HEADLINE_TIRED
         val recent = previous.filter { it.startMs < trip.startMs }.take(TREND_TRIPS)
         val reference = if (recent.isEmpty()) FIRST_TRIP_REFERENCE.toDouble() else recent.map { it.avgAggression }.average()
         val diff = trip.avgAggression - reference
@@ -109,6 +115,8 @@ object TripSummarizer {
     }
 
     fun minutesText(ms: Long): String = "${(ms / 60_000.0).roundToInt().coerceAtLeast(1)}분"
+
+    private val fatigueKinds = setOf(InterventionKind.FATIGUE_HOLD_ON, InterventionKind.FATIGUE_SUGGEST)
 
     private val timedResults = setOf(InterventionResult.DONE, InterventionResult.FAILED)
 

@@ -129,6 +129,16 @@ class BriefingTest {
     }
 
     @Test
+    fun `parked state handled before the route still briefs the hard sections`() {
+        val policy = BriefingPolicy()
+        val r = route(consecutive)
+
+        val action = policy.onDrivingState(DrivingState.PARKED, r).single() as BriefingAction.SpeakBriefing
+
+        assertTrue(action.text, action.text.contains("분기가"))
+    }
+
+    @Test
     fun `F1-01 starting to drive stops the briefing`() {
         val policy = BriefingPolicy()
         policy.onRoute(route(consecutive), DrivingState.PARKED)

@@ -22,6 +22,7 @@ import com.pleos.cooldown.domain.cooldown.HvacTarget
 import com.pleos.cooldown.domain.cooldown.ManualChange
 import com.pleos.cooldown.domain.cooldown.ManualChangeDetector
 import com.pleos.cooldown.util.Clock
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -74,6 +75,7 @@ class PleosHvacController(
     private var seatVentilation: Int? = null
     private var recirculation: Boolean? = null
     private var autoRecirculation: Boolean? = null
+    private var lastRecoverMs = Long.MIN_VALUE / 2
 
     private val temperatureListener = object : HvacTemperatureListener {
         override fun onHvacTemperatureUpdated(value: Float?) {
@@ -145,16 +147,14 @@ class PleosHvacController(
 
     /**
      * 지원 범위를 하나씩 확인한다. 에뮬레이터에서 여러 확인을 한꺼번에 보내면 일부가 응답하지 않아서
-     * 순서대로, 각각 시간 제한을 두고 보낸다.
+     * 순서대로, 각각 시간 제한을 두고 보낸다. 여기서 못 얻은 것은 [recoverMissing]이 주행 중에 다시 얻는다.
      */
     override suspend fun prepare() {
         val v = vehicle ?: return
+        setUpTemperature(v.getHVAC())
+        setUpFanSpeed(v.getHVAC())
         val hvac = v.getHVAC()
-        request<Map<SeatArea, AreaBounds<*>>>("temperature") { ok, fail -> hvac.checkHvacTemperatureCapabilities(ok, fail) }
-            ?.keys?.driverArea()?.let { a -> temperatureArea = a; hvac.registerHvacTemperature(a, temperatureListener) }
-        request<Map<SeatArea, List<*>>>("fan speed") { ok, fail -> hvac.checkHvacFanSpeedCapabilities(ok, fail) }
-            ?.keys?.driverArea()?.let { a -> fanSpeedArea = a; hvac.registerHvacFanSpeed(a, fanSpeedListener) }
-        val power = request<List<SeatArea>>("power") { ok, fail -> hvac.checkHvacPowerCapabilities(ok, fail) }?.driverArea()
+        val power = retrying<List<SeatArea>>("power") { ok, fail -> hvac.checkHvacPowerCapabilities(ok, fail) }?.driverArea()
         if (power == null) {
             // 전원을 따로 끌 수 없는(또는 확인되지 않는) 차량이면 늘 켜져 있는 것으로 본다
             powerOn = true
@@ -163,47 +163,85 @@ class PleosHvacController(
             powerArea = power
             hvac.registerHvacPowerState(power, powerListener)
         }
-        request<List<SeatArea>>("recirculation") { ok, fail -> hvac.checkHvacRecirculationCapabilities(ok, fail) }
-            ?.driverArea()?.let { a -> recirculationArea = a; hvac.registerHvacRecirculationState(a, recirculationListener) }
-        request<List<SeatArea>>("auto recirculation") { ok, fail -> hvac.checkHvacAutoRecirculationCapabilities(ok, fail) }
+        setUpRecirculation(hvac)
+        retrying<List<SeatArea>>("auto recirculation") { ok, fail -> hvac.checkHvacAutoRecirculationCapabilities(ok, fail) }
             ?.driverArea()?.let { a -> autoRecirculationArea = a; hvac.registerHvacAutoRecirculationState(a, autoRecirculationListener) }
-        request<Map<SeatArea, List<FanDirectionType>>>("fan direction") { ok, fail -> hvac.checkHvacFanDirectionCapabilities(ok, fail) }
+        retrying<Map<SeatArea, List<FanDirectionType>>>("fan direction") { ok, fail -> hvac.checkHvacFanDirectionCapabilities(ok, fail) }
             ?.keys?.driverArea()?.let { a ->
                 fanDirectionArea = a
                 // 풍향은 변경 리스너가 없어서 여기서 한 번 읽고, 그 뒤로는 refreshFanDirection으로 다시 읽는다
-                fanDirection = request<FanDirectionType?>("fan direction value") { ok, fail -> hvac.getHvacFanDirection(a, ok, fail) }
+                fanDirection = retrying<FanDirectionType?>("fan direction value") { ok, fail -> hvac.getHvacFanDirection(a, ok, fail) }
                     ?.toDomain()?.also { detector.onFanDirection(clock.nowMs(), it) }
                 publish()
             }
-        request<Map<SeatArea, AreaBounds<*>>>("seat ventilation") { ok, fail -> v.getSeat().checkSeatVentilationCapabilities(ok, fail) }
-            ?.keys?.driverArea()?.let { a -> seatVentilationArea = a; v.getSeat().registerHvacSeatVentilation(a, seatVentilationListener) }
+        setUpSeatVentilation(v.getSeat())
         readCurrentValues(v)
     }
 
-    /** 구독만으로는 현재 값이 오지 않아서(에뮬레이터 확인) 한 번씩 읽어 둔다 */
+    private suspend fun setUpTemperature(hvac: HVAC) {
+        retrying<Map<SeatArea, AreaBounds<*>>>("temperature") { ok, fail -> hvac.checkHvacTemperatureCapabilities(ok, fail) }
+            ?.keys?.driverArea()?.let { a -> temperatureArea = a; hvac.registerHvacTemperature(a, temperatureListener) }
+    }
+
+    private suspend fun setUpFanSpeed(hvac: HVAC) {
+        retrying<Map<SeatArea, List<*>>>("fan speed") { ok, fail -> hvac.checkHvacFanSpeedCapabilities(ok, fail) }
+            ?.keys?.driverArea()?.let { a -> fanSpeedArea = a; hvac.registerHvacFanSpeed(a, fanSpeedListener) }
+    }
+
+    private suspend fun setUpRecirculation(hvac: HVAC) {
+        retrying<List<SeatArea>>("recirculation") { ok, fail -> hvac.checkHvacRecirculationCapabilities(ok, fail) }
+            ?.driverArea()?.let { a -> recirculationArea = a; hvac.registerHvacRecirculationState(a, recirculationListener) }
+    }
+
+    private suspend fun setUpSeatVentilation(seat: Seat) {
+        retrying<Map<SeatArea, AreaBounds<*>>>("seat ventilation") { ok, fail -> seat.checkSeatVentilationCapabilities(ok, fail) }
+            ?.keys?.driverArea()?.let { a -> seatVentilationArea = a; seat.registerHvacSeatVentilation(a, seatVentilationListener) }
+    }
+
+    /** 구독만으로는 현재 값이 오지 않아서(에뮬레이터 확인) 한 번씩 읽어 둔다. 이미 아는 값은 건너뛴다 */
     private suspend fun readCurrentValues(v: Vehicle) {
         val hvac = v.getHVAC()
-        temperatureArea?.let { a ->
-            request<Float?>("temperature value") { ok, fail -> hvac.getHvacTemperature(a, TemperatureUnit.CELSIUS, ok, fail) }
+        temperatureArea?.takeIf { temperature == null }?.let { a ->
+            retrying<Float?>("temperature value") { ok, fail -> hvac.getHvacTemperature(a, TemperatureUnit.CELSIUS, ok, fail) }
                 ?.let { temperature = it; detector.onTemperature(clock.nowMs(), it) }
         }
-        fanSpeedArea?.let { a ->
-            request<Int?>("fan speed value") { ok, fail -> hvac.getHvacFanSpeed(a, ok, fail) }
+        fanSpeedArea?.takeIf { fanSpeed == null }?.let { a ->
+            retrying<Int?>("fan speed value") { ok, fail -> hvac.getHvacFanSpeed(a, ok, fail) }
                 ?.let { fanSpeed = it; detector.onFanSpeed(clock.nowMs(), it) }
         }
-        powerArea?.let { a -> request<Boolean?>("power value") { ok, fail -> hvac.getHvacPowerState(a, ok, fail) }?.let { powerOn = it } }
-        recirculationArea?.let { a ->
-            request<Boolean?>("recirculation value") { ok, fail -> hvac.getHvacRecirculationState(a, ok, fail) }
+        powerArea?.takeIf { powerOn == null }?.let { a ->
+            retrying<Boolean?>("power value") { ok, fail -> hvac.getHvacPowerState(a, ok, fail) }?.let { powerOn = it }
+        }
+        recirculationArea?.takeIf { recirculation == null }?.let { a ->
+            retrying<Boolean?>("recirculation value") { ok, fail -> hvac.getHvacRecirculationState(a, ok, fail) }
                 ?.let { recirculation = it; detector.onRecirculation(clock.nowMs(), it) }
         }
-        autoRecirculationArea?.let { a ->
-            request<Boolean?>("auto recirculation value") { ok, fail -> hvac.getHvacAutoRecirculationState(a, ok, fail) }?.let { autoRecirculation = it }
+        autoRecirculationArea?.takeIf { autoRecirculation == null }?.let { a ->
+            retrying<Boolean?>("auto recirculation value") { ok, fail -> hvac.getHvacAutoRecirculationState(a, ok, fail) }
+                ?.let { autoRecirculation = it }
         }
-        seatVentilationArea?.let { a ->
-            request<Int?>("seat ventilation value") { ok, fail -> v.getSeat().getHvacSeatVentilationState(a, ok, fail) }
+        seatVentilationArea?.takeIf { seatVentilation == null }?.let { a ->
+            retrying<Int?>("seat ventilation value") { ok, fail -> v.getSeat().getHvacSeatVentilationState(a, ok, fail) }
                 ?.let { seatVentilation = it; detector.onSeatVentilation(clock.nowMs(), it) }
         }
         publish()
+    }
+
+    override suspend fun recoverMissing() {
+        val v = vehicle ?: return
+        val missing = temperatureArea == null || fanSpeedArea == null || recirculationArea == null ||
+            seatVentilationArea == null || temperature == null || fanSpeed == null || powerOn == null ||
+            (recirculationArea != null && recirculation == null) || (seatVentilationArea != null && seatVentilation == null)
+        val now = clock.nowMs()
+        if (!missing || now - lastRecoverMs < RECOVER_INTERVAL_MS) return
+        lastRecoverMs = now
+        Log.i(TAG, "recovering missing HVAC info")
+        val hvac = v.getHVAC()
+        if (temperatureArea == null) setUpTemperature(hvac)
+        if (fanSpeedArea == null) setUpFanSpeed(hvac)
+        if (recirculationArea == null) setUpRecirculation(hvac)
+        if (seatVentilationArea == null) setUpSeatVentilation(v.getSeat())
+        readCurrentValues(v)
     }
 
     override fun stop() {
@@ -240,7 +278,7 @@ class PleosHvacController(
         val hvac = v.getHVAC()
         // SDK의 제네릭 타입은 런타임에 지워져서 실제로는 Double이 들어온다 (에뮬레이터에서 ClassCastException 확인).
         // 그래서 숫자는 모두 Number로 받아 변환한다
-        val temp = request<Map<SeatArea, AreaBounds<*>>>("temperature limits") { ok, fail ->
+        val temp = retrying<Map<SeatArea, AreaBounds<*>>>("temperature limits") { ok, fail ->
             hvac.checkHvacTemperatureCapabilities(ok, fail)
         }?.driverValue()
         val fanSpeeds = request<Map<SeatArea, List<*>>>("fan speed limits") { ok, fail ->
@@ -357,6 +395,18 @@ class PleosHvacController(
         }
     }.also { if (it == null) Log.w(TAG, "HVAC $what: no result") }
 
+    /**
+     * 지원 범위 확인·현재 값 읽기. 앱 시작 직후 첫 요청은 SDK 연결이 덜 돼 답이 없을 때가 있어서
+     * (에뮬레이터에서 온도 확인·시트 통풍 값이 3초 안에 안 옴) 한 번 더 묻는다.
+     */
+    private suspend fun <T> retrying(
+        what: String,
+        call: (onComplete: (T) -> Unit, onFailed: (Exception) -> Unit) -> Unit,
+    ): T? = request(what, call) ?: run {
+        delay(CAPABILITY_RETRY_DELAY_MS)
+        request("$what (retry)", call)
+    }
+
     private suspend fun set(call: (onDone: () -> Unit, onFailed: (Exception) -> Unit) -> Unit): Boolean =
         suspendCancellableCoroutine { cont ->
             try {
@@ -389,5 +439,8 @@ class PleosHvacController(
     private companion object {
         const val TAG = "PleosHvac"
         const val REQUEST_TIMEOUT_MS = 3_000L
+        const val CAPABILITY_RETRY_DELAY_MS = 1_000L
+        /** [recoverMissing]를 다시 시도하는 최소 간격 */
+        const val RECOVER_INTERVAL_MS = 10_000L
     }
 }

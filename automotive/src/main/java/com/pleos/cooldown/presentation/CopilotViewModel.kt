@@ -91,7 +91,8 @@ class CopilotViewModel(private val container: AppContainer) : ViewModel() {
         .flatMapLatest { list ->
             container.tripRepository.interventionsOf(list.map { it.id }).map { byTrip ->
                 list.mapIndexed { i, trip ->
-                    TripItem(trip, byTrip[trip.id].orEmpty(), TripSummarizer.headline(trip, list.drop(i + 1)))
+                    val interventions = byTrip[trip.id].orEmpty()
+                    TripItem(trip, interventions, TripSummarizer.headline(trip, list.drop(i + 1), interventions))
                 }
             }
         }
@@ -177,7 +178,7 @@ class CopilotViewModel(private val container: AppContainer) : ViewModel() {
             _report.value = ReportUi(
                 tripId = tripId,
                 dateText = TripSummarizer.dateText(record.trip.startMs, zone),
-                headline = TripSummarizer.headline(record.trip, older),
+                headline = TripSummarizer.headline(record.trip, older, record.interventions),
                 duration = TripSummarizer.durationText(record.trip.durationMs),
                 helpCount = record.interventions.size,
                 thirdLabel = label,

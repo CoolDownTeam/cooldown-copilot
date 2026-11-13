@@ -30,6 +30,12 @@ interface HvacController {
      */
     suspend fun refreshFanDirection() = Unit
 
+    /**
+     * [prepare] 때 SDK가 답하지 않아 못 얻은 지원 범위·현재 값을 다시 얻는다. 주행 중 주기적으로 부른다.
+     * 이게 없으면 시작 직후 한 번 무응답만으로 그 실행 내내 공조 개입이 멈춘다
+     */
+    suspend fun recoverMissing() = Unit
+
     /** SAFE-04: 지원 범위. 온도·풍량을 지원하지 않으면 null */
     suspend fun limits(): HvacLimits?
 

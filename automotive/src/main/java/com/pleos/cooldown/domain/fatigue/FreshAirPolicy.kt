@@ -33,6 +33,13 @@ class FreshAirPolicy(private val config: Config = Config()) {
     /** 지금 앱이 외기로 바꿔 둔 상태인지 */
     val active: Boolean get() = freshUntilMs != null
 
+    /**
+     * 운전자가 둔 공조 상태. 앱이 외기로 바꿔 둔 동안에는 내기순환이 켜져 있던 것으로 돌려준다
+     * (외기 전환은 내기순환일 때만 시작한다). 피로 케어가 이걸 "원래 값"으로 저장해야,
+     * 외기 전환 중에 `HOLD_ON`이 시작돼도 끝날 때 내기순환으로 되돌린다.
+     */
+    fun driverSet(hvac: HvacSnapshot?): HvacSnapshot? = if (active) hvac?.copy(recirculation = true) else hvac
+
     /** F3-P2: 탑승 인원을 모르면 운전자 1명으로 본다 */
     fun startTrip(occupantCount: Int?) {
         occupants = (occupantCount ?: 1).coerceAtLeast(1)

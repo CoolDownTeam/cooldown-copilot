@@ -66,6 +66,8 @@ class BriefingPolicy(private val config: Config = Config()) {
 
     private fun maybeBrief(route: RouteSnapshot): List<BriefingAction> {
         if (briefedRouteId == route.routeId || briefing) return emptyList()
+        // P단 신호가 경로보다 먼저 오면 onRoute가 아직 구간을 계산하지 않았을 수 있다. 받은 경로로 다시 계산한다
+        sections = HardSectionDetector.detect(route)
         briefedRouteId = route.routeId
         briefing = true
         return listOf(BriefingAction.SpeakBriefing(BriefingComposer.briefing(route, sections)))

@@ -91,6 +91,8 @@ class CopilotRunner(
         val restAreaRefreshTicks: Int = 10,
         /** 풍향을 다시 읽는 간격 (틱). 풍향은 변경 리스너가 없다 */
         val fanDirectionRefreshTicks: Int = 2,
+        /** 점수·공조 상태를 로그로 남기는 간격 (틱). 시연·현장 확인용 */
+        val statusLogTicks: Int = 60,
     )
 
     private val _driverState = MutableStateFlow(DriverState.IDLE)
@@ -142,6 +144,7 @@ class CopilotRunner(
     private var tripJob: Job? = null
     private var fanRefreshJob: Job? = null
     private var tripEndJob: Job? = null
+    private var loggedFatiguePhase = FatiguePhase.DISABLED
 
     fun start() {
         if (rootJob != null) return
@@ -301,16 +304,21 @@ class CopilotRunner(
                 e.tick(now)
                 // 따로 띄워서, SDK가 답하지 않아도(최대 3초) 샘플링이 멈추지 않게 한다
                 if ((samples / config.samplesPerTick) % config.fanDirectionRefreshTicks == 0 && fanRefreshJob?.isActive != true) {
-                    fanRefreshJob = scope.launch { hvac.refreshFanDirection() }
+                    fanRefreshJob = scope.launch {
+                        hvac.recoverMissing()
+                        hvac.refreshFanDirection()
+                    }
                 }
                 val driver = e.state.value
                 recorder.onState(driver)
+                if ((samples / config.samplesPerTick) % config.statusLogTicks == 0) logStatus(driver)
                 val route = routes.route.value
                 // F3-02: 피로 케어가 공조를 쓰는 동안 F2는 들어오지 않는다
                 execute(policy.onTick(now, driver, if (fatigue.holdingClimate) null else hvac.snapshot.value))
+                // 외기 전환 중이면 운전자가 둔 값(내기순환)을 넘겨, 피로 케어가 끝날 때 외기로 남지 않게 한다
                 executeFatigue(
                     fatigue.onTick(
-                        now, driver, hvac.snapshot.value, policy.intervening,
+                        now, driver, freshAir.driverSet(hvac.snapshot.value), policy.intervening,
                         route?.nextRestArea(), route?.nextTurnDistanceM(),
                     )
                 )
@@ -370,14 +378,19 @@ class CopilotRunner(
     private suspend fun executeFatigue(actions: List<FatigueAction>) {
         for (action in actions) {
             when (action) {
-                is FatigueAction.ApplyHvac -> if (!hvac.apply(action.target)) {
-                    executeFatigue(fatigue.onCommandFailed(clock.nowMs()))
+                is FatigueAction.ApplyHvac -> {
+                    Log.i(TAG, "fatigue hvac ${action.target}")
+                    if (!hvac.apply(action.target)) executeFatigue(fatigue.onCommandFailed(clock.nowMs()))
                 }
-                is FatigueAction.SetRecirculation -> if (!hvac.setRecirculation(action.on)) {
-                    Log.w(TAG, "recirculation switch failed")
+                is FatigueAction.SetRecirculation -> {
+                    Log.i(TAG, "fatigue recirculation=${action.on}")
+                    if (!hvac.setRecirculation(action.on)) Log.w(TAG, "recirculation switch failed")
                 }
                 is FatigueAction.Announce -> scope.launch { announceFatigue(action) }
-                is FatigueAction.InterventionStarted -> recorder.onFatigueHoldStarted(action.atMs)
+                is FatigueAction.InterventionStarted -> {
+                    Log.i(TAG, "fatigue hold-on started")
+                    recorder.onFatigueHoldStarted(action.atMs)
+                }
                 is FatigueAction.InterventionEnded -> {
                     Log.i(TAG, "fatigue hold-on ended: ${action.outcome}")
                     recorder.onFatigueHoldEnded(action.atMs, action.outcome)
@@ -390,14 +403,17 @@ class CopilotRunner(
     private suspend fun executeFreshAir(actions: List<FreshAirAction>) {
         for (action in actions) {
             when (action) {
-                is FreshAirAction.SetRecirculation -> if (!hvac.setRecirculation(action.on)) {
-                    Log.w(TAG, "fresh air switch failed")
+                is FreshAirAction.SetRecirculation -> {
+                    Log.i(TAG, "fresh air recirculation=${action.on}")
+                    if (!hvac.setRecirculation(action.on)) Log.w(TAG, "fresh air switch failed")
                 }
                 is FreshAirAction.Started -> {
+                    Log.i(TAG, "fresh air started")
                     _freshAir.value = true
                     recorder.onFreshAirStarted(action.atMs)
                 }
                 is FreshAirAction.Ended -> {
+                    Log.i(TAG, "fresh air ended yielded=${action.yielded}")
                     _freshAir.value = false
                     recorder.onFreshAirEnded(action.atMs, action.yielded)
                 }
@@ -454,8 +470,22 @@ class CopilotRunner(
     private fun publishPhase() {
         _phase.value = policy.phase
         _fatiguePhase.value = fatigue.phase
+        if (fatigue.phase != loggedFatiguePhase) {
+            Log.i(TAG, "fatigue phase $loggedFatiguePhase -> ${fatigue.phase}")
+            loggedFatiguePhase = fatigue.phase
+        }
         recorder.onFatiguePhase(clock.nowMs(), fatigue.phase)
         engine?.setIntervening(policy.intervening || fatigue.holdingClimate, clock.nowMs())
+    }
+
+    /** 점수와 공조 상태. 공조 값을 못 읽으면(snapshot=null) F2·F3 공조 개입이 모두 멈추므로 같이 남긴다 */
+    private fun logStatus(driver: DriverState) {
+        Log.i(
+            TAG,
+            "status aggression=${driver.aggression} fatigue=${driver.fatigue} band=${driver.speedBand} " +
+                "continuous=${driver.continuousDrivingMs / 60_000}min learning=${driver.learning} " +
+                "fatigue=${fatigue.phase} cooldown=${policy.phase} freshAir=${freshAir.active} hvac=${hvac.snapshot.value}",
+        )
     }
 
     private companion object {

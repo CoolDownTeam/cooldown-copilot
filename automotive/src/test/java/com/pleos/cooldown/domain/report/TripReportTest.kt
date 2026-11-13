@@ -93,6 +93,16 @@ class TripReportTest {
     }
 
     @Test
+    fun `headline mentions fatigue when fatigue care stepped in, even on a calm trip`() {
+        val previous = listOf(trip(30, startMs = t0 - 100_000))
+        val suggest = InterventionRecord(t0, t0 + 1, InterventionKind.FATIGUE_SUGGEST, 0, InterventionResult.RESTED)
+        val freshAir = InterventionRecord(t0, t0 + 1, InterventionKind.FRESH_AIR, 0, InterventionResult.DONE)
+
+        assertEquals(TripSummarizer.HEADLINE_TIRED, TripSummarizer.headline(trip(20), previous, listOf(suggest)))
+        assertEquals(TripSummarizer.HEADLINE_CALM, TripSummarizer.headline(trip(20), previous, listOf(freshAir)))
+    }
+
+    @Test
     fun `timeline sentences show learning results`() {
         val lines = TripSummarizer.timeline(
             listOf(
