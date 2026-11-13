@@ -2,7 +2,7 @@
 
 > 평소의 나를 학습한 AI가 운전이 거칠어지면 실내를 식혀 주고, 졸음은 실내 공기로 미리 막고 조향으로 잡아 **실제로 쉬게 만드는** 무상호작용 코파일럿.
 
-Pleos Connect(AAOS 기반) 차량용 앱입니다. 현대자동차그룹 차량용 앱 개발 공모전 출품작으로 개발하고 있습니다.
+Pleos Connect(AAOS 기반) 차량용 앱입니다. 현대자동차그룹 차량용 앱 개발 공모전 출품작입니다. 설치 파일과 시연 영상은 [Release v1.1](https://github.com/CoolDownTeam/cooldown-copilot/releases/tag/v1.1)에 있습니다.
 
 ---
 
@@ -29,11 +29,12 @@ Pleos Connect(AAOS 기반) 차량용 앱입니다. 현대자동차그룹 차량�
 
 | ID | 기능 | 언제 | 운전자 입력 |
 |---|---|---|---|
-| C0 | **개인 기준선 학습** — 속도대별로 "평소의 나"를 배우고, 지금 운전이 평소와 얼마나 다른지 공격성·피로 점수(0~100)로 계산 | 항상 | 없음 |
+| C0 | **개인 기준선 학습** — 속도대별로 "평소의 나"를 배우고(처음 5회 뒤에도 주행마다 계속 갱신), 지금 운전이 평소와 얼마나 다른지 공격성·피로 점수(0~100)로 계산 | 항상 | 없음 |
 | F2 | **쿨다운 캐빈** — 평소보다 거칠어지면 설정 온도를 1~2℃ 낮추고 바람을 한 단계 올렸다가, 진정되면 되돌림. 계절과 사람마다 강도를 따로 학습 | 주행 중 | 없음 ("추워" 한마디로 즉시 복원) |
 | F3 | **피로 케어** — ① 내기순환이 길어지면 무음으로 외기 전환(CO2 누적 예방) ② 조향으로 운전자도 모르는 졸음 감지 ③ "응" 한마디면 경로 위 휴게소 입구 전에 알려 주고, 도착하면 커피·낮잠 권유. 찬 바람은 휴게소까지 버티는 보조 | 주행 중 (예방은 항상) | "응/아니" 한마디 |
-| F1 | **코스 브리핑** — 출발 전 어려운 구간(연속 분기, 급커브 등)을 30초로 미리 안내 | 출발 전 | 없음 |
-| F4 | **주행 리포트** — "평소보다 차분한 주행이었어요", 개입 기록, 최근 7회 추세 | 도착 후 | 정차 중 터치 |
+| F1 | **코스 브리핑** — 출발 전 어려운 구간(연속 분기, 유턴·회전교차로, 정체 진입)을 30초 안에 미리 안내하고, 주행 중에는 1km 전에 한 문장 | 출발 전·주행 중 | 없음 |
+| F4 | **주행 리포트** — "평소보다 차분한 주행이었어요"·"오늘은 조금 피곤하셨던 것 같아요", 개입 기록과 효과, 최근 7회 추세 | 도착 후 | 정차 중 터치 |
+| S1 | **설정** — 기능별 켜기·끄기, 배운 취향 보기, 운전 습관 다시 배우기 | 정차 중 | 정차 중 터치 |
 
 ### 동작 흐름
 
@@ -75,16 +76,18 @@ flowchart LR
 |---|---|
 | D0 차량 데이터 계층 | ✅ 완료 |
 | C0 패턴 엔진 (특징 추출·기준선 학습·상태 점수·저장) | ✅ 완료 |
-| F2 쿨다운 캐빈 (정책·계절 학습·공조·음성·Gleo) | 🔄 리뷰 중 (PR #7), 에뮬레이터 확인 전 |
-| F3 피로 케어 | ⏳ 예정 |
-| F1 코스 브리핑 | ⏳ 예정 |
-| F4 주행 리포트 · 새 화면 (SC-01~06) | ⏳ 예정 |
+| F2 쿨다운 캐빈 (정책·계절 학습·공조·음성·Gleo) | ✅ 완료, 에뮬레이터 확인 |
+| F3 피로 케어 (환기·졸음 케어·휴게소 제안·Gleo "응") | ✅ 완료, 에뮬레이터 확인 (시연용 경로) |
+| F1 코스 브리핑 | ✅ 완료, 에뮬레이터 확인 (시연용 경로) |
+| F4 주행 리포트 · 화면 6종 (SC-01~06) | ✅ 완료 |
 
-일정은 [docs/schedule.md](docs/schedule.md)에 있습니다.
+단위 테스트 175개. 에뮬레이터 확인 기록은 [docs/feature-spec.md](docs/feature-spec.md) 11.5절에 있습니다.
 
 ### 알려진 제약
-- 공조 제어 권한(`CONTROL_CAR_CLIMATE`, `CONTROL_CAR_SEATS`)은 Pleos App Market 사전 승인이 필요합니다. 승인 전에는 `FakeHvacController`로 시연합니다.
-- Gleo 음성 호출은 Pleos 서버에 앱 스키마가 등록돼야 동작합니다. 앱 쪽 수신·응답 경로는 에뮬레이터에서 확인했습니다.
+- 공조 제어 권한(`CONTROL_CAR_CLIMATE`, `CONTROL_CAR_SEATS`)은 Pleos App Market 사전 승인이 필요합니다. 에뮬레이터에서는 이 권한으로 실제 VHAL 공조 값을 바꿔 확인했습니다.
+- Gleo 음성 호출은 Pleos 서버에 앱 스키마가 등록돼야 동작합니다. 앱 쪽 수신·응답 경로는 같은 Intent를 `adb`로 보내 에뮬레이터에서 확인했습니다.
+- 실제 내비 경로의 휴게소·정체 정보(NaviHelper TBT)는 경로 안내 중에만 와서, 시연은 같은 형식의 시연용 경로(`<시나리오>.route.csv`)로 했습니다. 실차 경로 연동 확인이 남아 있습니다.
+- 주행 중 안내 문장은 LLM이 아니라 템플릿입니다. 정해진 순간에 지연 없이, 통신이 끊겨도 나와야 하기 때문입니다 ([기획서](docs/proposal.md) AI 설계).
 
 ---
 
@@ -105,8 +108,8 @@ flowchart LR
 
 ```
 automotive/src/main/java/com/pleos/cooldown/
-  data/          vehicle · hvac · voice · gleo · local(Room)
-  domain/        model · engine(C0) · cooldown(F2)   ← 순수 Kotlin, JVM 단위 테스트
+  data/          vehicle · hvac · navi · voice · gleo · local(Room) · settings
+  domain/        model · engine(C0) · cooldown(F2) · fatigue(F3) · briefing(F1) · report(F4)   ← 순수 Kotlin, JVM 단위 테스트
   service/       CopilotService(포그라운드) · CopilotRunner(주행 한 번을 처음부터 끝까지)
   presentation/  Compose 화면
   di/            AppContainer
@@ -130,10 +133,29 @@ Android Studio에서 Pleos Connect Emulator(AVD)를 설치한 뒤:
 ./gradlew :automotive:lintDebug -q
 ```
 
-Gleo Action을 흉내 내서 F2 반응을 확인하려면 (개입 중일 때):
+### 시연 재생 (debug·demo 빌드)
+
+녹화해 둔 차량 신호를 재생합니다. 앱은 운전자 프로필(사용자 10)에서 돕니다.
 
 ```bash
-adb shell "am broadcast -a ADJUST_CABIN_COMFORT -p com.pleos.cooldown --es ACTION_PARAM '{\"feeling\":\"cold\"}'"
+adb shell am start --user 10 -S -n com.pleos.cooldown/.presentation.MainActivity --es scenario f2_aggressive
+```
+
+```bash
+adb shell am start --user 10 -S -n com.pleos.cooldown/.presentation.MainActivity --es scenario f3_highway
+```
+
+- `f2_aggressive`: 거친 운전 13분 → 쿨다운 1·2단계 → 복원 → 리포트
+- `f3_highway`: P 브리핑 → 고속도로 약 1시간 → 환기·졸음 케어·휴게소 제안 → 휴게소 정차 (시연용 경로 `f3_highway.route.csv` 사용)
+
+Gleo 응답을 흉내 내려면 (쿨다운 중 "추워" / 휴게소 제안 뒤 8초 안에 "응"):
+
+```bash
+adb shell "am broadcast --user current -a ADJUST_CABIN_COMFORT -p com.pleos.cooldown --es ACTION_PARAM '{\"feeling\":\"cold\"}'"
+```
+
+```bash
+adb shell "am broadcast --user current -a ANSWER_REST_SUGGESTION -p com.pleos.cooldown --es ACTION_PARAM '{\"accept\":true}'"
 ```
 
 ---
@@ -142,7 +164,7 @@ adb shell "am broadcast -a ADJUST_CABIN_COMFORT -p com.pleos.cooldown --es ACTIO
 
 | 문서 | 내용 |
 |---|---|
-| [docs/proposal.md](docs/proposal.md) | 기획서 초안 (공모전 양식 02장) |
+| [docs/proposal.md](docs/proposal.md) | 기획서 (공모전 양식 02장) |
 | [docs/feature-spec.md](docs/feature-spec.md) | 상세 기능명세서 (요구사항 ID, 상태 머신, 수용 기준) |
 | [docs/screen-spec.md](docs/screen-spec.md) | 화면 명세 (SC-01~06) |
 | [docs/research.md](docs/research.md) | 근거 자료와 한계 |
