@@ -12,6 +12,9 @@ import com.pleos.cooldown.data.local.TripRepository
 import com.pleos.cooldown.data.settings.SettingsStore
 import com.pleos.cooldown.domain.report.TripWithInterventions
 import com.pleos.cooldown.data.navi.PleosRouteSource
+import com.pleos.cooldown.data.navi.RouteSource
+import com.pleos.cooldown.data.navi.ScenarioRouteParser
+import com.pleos.cooldown.data.navi.ScenarioRouteSource
 import com.pleos.cooldown.data.vehicle.FakeVehicleDataSource
 import com.pleos.cooldown.data.vehicle.PleosVehicleDataSource
 import com.pleos.cooldown.data.vehicle.ScenarioParser
@@ -57,11 +60,15 @@ class AppContainer(context: Context) {
         val csv = runCatching {
             appContext.assets.open("scenarios/$name.csv").bufferedReader().use { it.readText() }
         }.getOrNull() ?: return false
-        vehicleDataSource = FakeVehicleDataSource(
-            ScenarioParser.parse(csv),
-            CoroutineScope(SupervisorJob() + Dispatchers.Default),
-            clock,
-        )
+        val scenarioScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val vehicle = FakeVehicleDataSource(ScenarioParser.parse(csv), scenarioScope, clock)
+        vehicleDataSource = vehicle
+        // 같은 이름의 경로 파일이 있으면 내비 대신 그 경로를 재생한다 (F1·F3 시연)
+        runCatching {
+            appContext.assets.open("scenarios/$name.route.csv").bufferedReader().use { it.readText() }
+        }.getOrNull()?.let { text ->
+            scenarioRouteSource = ScenarioRouteSource(ScenarioRouteParser.parse(text), vehicle.signal, scenarioScope, clock)
+        }
         return true
     }
 
@@ -87,8 +94,14 @@ class AppContainer(context: Context) {
 
     val uxRestrictions: UxRestrictionSource by lazy { UxRestrictionSource(appContext) }
 
-    /** F1·F3가 함께 쓰는 내비 경로 */
-    val routeSource: PleosRouteSource by lazy { PleosRouteSource(appContext) }
+    /** 실제 내비 경로 */
+    val pleosRouteSource: PleosRouteSource by lazy { PleosRouteSource(appContext) }
+
+    /** 디버그 시연에서 시나리오와 같이 재생하는 경로. 없으면 null */
+    private var scenarioRouteSource: RouteSource? = null
+
+    /** F1·F3가 함께 쓰는 경로 */
+    val routeSource: RouteSource get() = scenarioRouteSource ?: pleosRouteSource
 
     /** 모든 주행 상태를 바꾸는 단일 스레드 (CopilotRunner 규칙) */
     private val runnerScope: CoroutineScope by lazy {

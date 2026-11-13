@@ -27,7 +27,22 @@ android {
                 "proguard-rules.pro"
             )
         }
+        // 심사 제출용: debug와 같은 시연 기능(시나리오 재생)을 두고 R8 코드·리소스 축소만 더한다
+        create("demo") {
+            initWith(getByName("debug"))
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            matchingFallbacks += listOf("debug")
+            // 실차(arm64-v8a)와 PC 에뮬레이터(x86_64)용 네이티브 라이브러리만 남긴다
+            ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        }
     }
+    // demo 빌드도 시연 시나리오(src/debug/assets)를 담는다
+    sourceSets.getByName("demo").assets.srcDir("src/debug/assets")
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -91,5 +106,13 @@ tasks.register<Copy>("exportSubmissionApk") {
     dependsOn("assembleDebug")
     from(layout.buildDirectory.dir("outputs/apk/debug")) { include("*-debug.apk") }
     rename { "CoolDownCopilot.apk" }
+    into(rootProject.layout.projectDirectory.dir("submission"))
+}
+
+// 같은 시연 기능에 R8 축소를 더한 demo 빌드를 submission/CoolDownCopilot_r8.apk로 복사한다
+tasks.register<Copy>("exportSubmissionDemoApk") {
+    dependsOn("assembleDemo")
+    from(layout.buildDirectory.dir("outputs/apk/demo")) { include("*-demo.apk") }
+    rename { "CoolDownCopilot_r8.apk" }
     into(rootProject.layout.projectDirectory.dir("submission"))
 }

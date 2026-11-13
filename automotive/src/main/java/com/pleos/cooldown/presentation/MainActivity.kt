@@ -65,7 +65,7 @@ class MainActivity : ComponentActivity() {
         intent.getStringExtra(EXTRA_DEMO_ROUTE)?.split(",")?.takeIf { it.size >= 3 }?.let { parts ->
             val lat = parts[0].toDoubleOrNull() ?: return@let
             val lon = parts[1].toDoubleOrNull() ?: return@let
-            val routes = container.routeSource
+            val routes = container.pleosRouteSource
             routes.start()
             routes.requestDemoRoute(lat, lon, parts[2])
             if (intent.getBooleanExtra(EXTRA_DEMO_SIMULATE, false)) {

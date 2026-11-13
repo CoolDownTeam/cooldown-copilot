@@ -1,0 +1,8 @@
+# f3_highway 시나리오와 같이 재생하는 시연 경로 (내비 경로 서버 없이 F1·F3 확인)
+# route,<총 거리 m>,<총 시간 s> / turn,<TurnKind>,<출발점부터 m>,<설명> / congestion,<시작 m>,<길이 m>,<CongestionLevel>,<도로>
+route,150000,5400
+turn,KEEP_RIGHT,5000,서창JC
+turn,KEEP_LEFT,5400,서창JC
+congestion,25000,3000,HEAVY,서해안고속도로
+turn,REST_AREA,94772,행담도휴게소
+turn,ARRIVE,150000,목적지
