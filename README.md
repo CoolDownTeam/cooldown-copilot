@@ -52,7 +52,7 @@ Pleos Connect(AAOS 기반) 차량용 앱입니다. 현대자동차그룹 차량�
 
 ---
 
-## 왜 만드나
+## 왜 필요한가
 
 | 문제 | 숫자 | 출처 |
 |---|---|---|
@@ -94,6 +94,8 @@ flowchart LR
     F3 --> NAVI["내비 TBT<br/>경로 위 휴게소"]
     F2 & F3 --> VOICE["음성 한 문장<br/>TTS / STT"]
     GLEO["Gleo: 글레오, 너무 추워"] --> F2
+    NAVI --> F1["F1 코스 브리핑<br/>어려운 구간"]
+    F1 --> VOICE
 ```
 
 ### 차별점
@@ -112,27 +114,28 @@ flowchart LR
 | SAFE-03 | 운전자가 직접 조작한 설정이 언제나 앱보다 우선한다 |
 | SAFE-04 | 지원하지 않는 차량 기능은 미리 확인해서 조용히 끈다 |
 | SAFE-05 | 주행 데이터는 차량 밖으로 보내지 않는다 |
-| SAFE-06 | 앱 카테고리를 게임으로 두지 않는다 (주행 중 실행 불가) |
+| SAFE-06 | 앱 카테고리는 주행 보조로 둔다 (게임 카테고리 앱은 주행 중 실행할 수 없다) |
 
 ---
 
-## 진행 상황
+## 구현 현황
 
-| 기능 | 상태 |
-|---|---|
-| D0 차량 데이터 계층 | ✅ 완료 |
-| C0 패턴 엔진 (특징 추출·기준선 학습·상태 점수·저장) | ✅ 완료 |
-| F2 쿨다운 캐빈 (정책·계절 학습·공조·음성·Gleo) | ✅ 완료, 에뮬레이터 확인 |
-| F3 피로 케어 (환기·졸음 케어·휴게소 제안·Gleo "응") | ✅ 완료, 에뮬레이터 확인 (시연용 경로) |
-| F1 코스 브리핑 | ✅ 완료, 에뮬레이터 확인 (시연용 경로) |
-| F4 주행 리포트 · 화면 6종 (SC-01~06) | ✅ 완료 |
+| 기능 | 구현 | 확인 방법 |
+|---|---|---|
+| 차량 신호 수집 (속도·기어·브레이크·조향) | ✅ | 에뮬레이터 |
+| C0 개인 기준선 학습·상태 점수 | ✅ | 단위 테스트 |
+| F2 쿨다운 캐빈 (계절별 강도 학습, Gleo "추워") | ✅ | 에뮬레이터 (공조 값 변경 확인) |
+| F3 피로 케어 (환기·졸음 케어·휴게소 제안, Gleo "응") | ✅ | 에뮬레이터 (시연용 경로) |
+| F1 코스 브리핑 | ✅ | 에뮬레이터 (시연용 경로) |
+| F4 주행 리포트·화면 6종 | ✅ | 에뮬레이터 |
 
-단위 테스트 177개. 에뮬레이터 확인 기록은 [docs/feature-spec.md](docs/feature-spec.md) 11절에 있습니다.
+단위 테스트 177개가 가상 시간으로 몇 시간짜리 주행을 재현해 검증합니다. 에뮬레이터 확인 기록은 [docs/feature-spec.md](docs/feature-spec.md) 11절에 있습니다.
 
-### 알려진 제약
+### 한계와 남은 확인
 - 공조 제어 권한(`CONTROL_CAR_CLIMATE`, `CONTROL_CAR_SEATS`)은 Pleos App Market 사전 승인이 필요합니다. 에뮬레이터에서는 이 권한으로 실제 VHAL 공조 값을 바꿔 확인했습니다.
 - Gleo 음성 호출은 Pleos 서버에 앱 스키마가 등록돼야 동작합니다. 앱 쪽 수신·응답 경로는 같은 Intent를 `adb`로 보내 에뮬레이터에서 확인했습니다.
 - 실제 내비 경로의 휴게소·정체 정보(NaviHelper TBT)는 경로 안내 중에만 와서, 시연은 같은 형식의 시연용 경로(`<시나리오>.route.csv`)로 했습니다. 실차 경로 연동 확인이 남아 있습니다.
+- 에뮬레이터 차량은 풍량 단계와 얼굴 쪽 풍향 지원을 알려 주지 않아서, 에뮬레이터에서는 온도·통풍시트·내외기만 바뀌고 바람 세기와 방향은 그대로입니다. 실차에서는 지원 범위를 확인해 함께 바꿉니다.
 - 주행 중 안내 문장은 LLM이 아니라 템플릿입니다. 정해진 순간에 지연 없이, 통신이 끊겨도 나와야 하기 때문입니다 ([기획서](docs/proposal.md) AI 설계).
 
 ---
@@ -179,15 +182,11 @@ Android Studio에서 Pleos Connect Emulator(AVD)를 설치한 뒤 이 저장소�
 ./gradlew :automotive:lintDebug -q
 ```
 
-제출용 release APK를 `apk/`에 다시 만들려면 (release 키는 저장소 밖 `~/.android-keys/cooldown-release.properties`에 있어야 서명됩니다):
+release 서명 키는 저장소에 넣지 않았습니다. 소스로 직접 빌드해 설치할 때는 debug 빌드(`assembleDebug`)를 쓰세요. 서명된 release APK는 [`apk/`](apk/) 폴더에 있습니다.
 
-```bash
-./gradlew :automotive:clean :automotive:exportReleaseApk -q
-```
+### 시연 재생
 
-### 시연 재생 (release·debug·demo 빌드)
-
-녹화해 둔 차량 신호를 재생합니다. 앱은 운전자 프로필(사용자 10)에서 돕니다.
+녹화해 둔 차량 신호를 재생합니다(release·debug 빌드 모두). 앱은 운전자 프로필(사용자 10)에서 실행됩니다. 재생 전에 첫 실행 동의를 마쳐야 합니다.
 
 ```bash
 adb shell am start --user 10 -S -n com.pleos.cooldown/.presentation.MainActivity --es scenario f2_aggressive
@@ -197,8 +196,8 @@ adb shell am start --user 10 -S -n com.pleos.cooldown/.presentation.MainActivity
 adb shell am start --user 10 -S -n com.pleos.cooldown/.presentation.MainActivity --es scenario f3_highway
 ```
 
-- `f2_aggressive`: 거친 운전 13분 → 쿨다운 1·2단계 → 복원 → 리포트
-- `f3_highway`: P 브리핑 → 고속도로 약 1시간 → 환기·졸음 케어·휴게소 제안 → 휴게소 정차 (시연용 경로 `f3_highway.route.csv` 사용)
+- `f2_aggressive` (약 13분): 거친 운전 약 3분 → 쿨다운 1·2단계 → 차분한 주행 10분 중 복원 → P단 → 리포트
+- `f3_highway` (약 63분): P단 브리핑 → 고속도로 약 1시간 → 환기·졸음 케어·휴게소 제안 → 휴게소 정차 (시연용 경로 `f3_highway.route.csv` 사용)
 
 Gleo 응답을 흉내 내려면 (쿨다운 중 "추워" / 휴게소 제안 뒤 8초 안에 "응"):
 
