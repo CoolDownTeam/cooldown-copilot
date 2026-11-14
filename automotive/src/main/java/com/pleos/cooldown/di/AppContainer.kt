@@ -52,7 +52,7 @@ class AppContainer(context: Context) {
     private var runnerCreated = false
 
     /**
-     * 디버그 빌드 시연용: `assets/scenarios/<name>.csv`를 재생하는 가짜 차량 신호로 바꾼다 (명세 10절).
+     * 시연용 (공모전 제출 빌드): `assets/scenarios/<name>.csv`를 재생하는 가짜 차량 신호로 바꾼다 (명세 10절).
      * 공조·음성·내비는 실제 SDK를 그대로 쓴다. 러너가 만들어지기 전에만 바꿀 수 있다.
      */
     fun useScenario(name: String): Boolean {
@@ -131,7 +131,7 @@ class AppContainer(context: Context) {
             voiceOut = PleosVoiceOutput(appContext),
             voiceIn = PleosVoiceInput(appContext),
             routes = routeSource,
-            settings = { settingsStore.settings.value },
+            settings = { settingsStore.settings.value.active },
         )
     }
 

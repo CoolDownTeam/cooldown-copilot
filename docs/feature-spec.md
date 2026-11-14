@@ -1,8 +1,8 @@
-# 기능명세서 — 쿨다운 코파일럿 (가칭)
+# 기능명세서 — 쿨다운 코파일럿
 
 > 버전 1.4 · 2026-11-04 (1.1: F2 운전자 반응·Gleo 연동 추가 / 1.2: F2 계절·운전자별 강도 학습, 화면 명세 분리 → `docs/screen-spec.md` / 1.3: C0 구현 반영 — 피로 점수 변환, 속도대 히스테리시스, 임계값 개인화 보류 / 1.4: F3를 예방·감지·휴식 유도 3단계로 재설계)
 > 요구사항 ID(`C0-01` 등)는 브랜치·커밋·테스트 이름에서 참조한다.
-> 수치(임계값·시간)는 모두 초기값이며 `CopilotConfig` 한 곳에서 관리하고, 에뮬레이터 모의 주행으로 조정한다.
+> 수치(임계값·시간)는 모두 초기값이며 각 정책 클래스의 `Config`에 모아 두고, 에뮬레이터 재생 결과로 조정한다.
 > API 시그니처는 SDK jar(Vehicle 2.0.3, NaviHelper 2.0.3)와 Pleos 문서(TextToSpeech·SpeechToText 3.3.1, Gleo Interface 구현 가이드)에서 확인한 것이다.
 
 ---
@@ -23,7 +23,7 @@
 | F1 | 코스 브리핑 | 출발 전(P단) + 어려운 구간 직전 | 없음 (자동 재생) | 필수 |
 | F4 | 주행 리포트 | 도착 후(P단) | 정차 중 터치 | 필수 |
 | S1 | 온보딩·설정 | 첫 실행, 정차 중 | 정차 중 터치 | 필수 |
-| X1 | LLM 문장 생성 | 정차 중 | 없음 | 선택 (11/12 보완일) |
+| X1 | LLM 문장 생성 | 정차 중 | 없음 | 구현하지 않음. 안내 문장은 템플릿으로 확정 (이유는 기획서 AI 설계), 향후 정차 중 리포트에만 검토 |
 
 ### 0.3 용어
 
@@ -75,7 +75,7 @@ di/
 presentation/
   onboarding/ home/ driving/ report/ history/ settings/   ← 화면 명세 docs/screen-spec.md (SC-01~06)
 util/
-  Clock, CopilotConfig
+  Clock
 ```
 
 ### 1.2 데이터 흐름
@@ -283,8 +283,8 @@ data class DriverState(
 | 현재 값 | `HVAC.getHvacTemperature(SeatArea, TemperatureUnit, …)`, `getHvacFanSpeed(SeatArea, …)`, `getHvacPowerState(SeatArea, …)` | `CAR_CLIMATE` |
 | 변경 | `HVAC.setHvacTemperature(SeatArea, Float, TemperatureUnit, …)`, `setHvacFanSpeed(SeatArea, Int, …)` | `CONTROL_CAR_CLIMATE` **(Pleos App Market 사전 승인 필요)** |
 | 운전자 조작 감지 | `HVAC.registerHvacTemperature(SeatArea, HvacTemperatureListener)`, `registerHvacFanSpeed` | `CAR_CLIMATE` |
-| 풍향 (겨울) | `HVAC.checkHvacFanDirectionCapabilities`, `getHvacFanDirection`, `setHvacFanDirection(SeatArea, FanDirectionType, …)` | 조회 `CAR_CLIMATE`, 변경 `CONTROL_CAR_CLIMATE` `[확인 필요]` |
-| 통풍시트 (여름) | `Seat.getHvacSeatVentilationState`, `setHvacSeatVentilation`, `registerHvacSeatVentilation` | `[확인 필요]` |
+| 풍향 (겨울) | `HVAC.checkHvacFanDirectionCapabilities`, `getHvacFanDirection`, `setHvacFanDirection(SeatArea, FanDirectionType, …)` | 조회 `CAR_CLIMATE`, 변경 `CONTROL_CAR_CLIMATE` (SDK jar `@RequiresPermission` 확인) |
+| 통풍시트 (여름) | `Seat.getHvacSeatVentilationState`, `setHvacSeatVentilation`, `registerHvacSeatVentilation` | 조회 `CAR_SEATS`, 변경 `CONTROL_CAR_SEATS` (SDK jar `@RequiresPermission` 확인) |
 | 외기온 (계절 판단) | AAOS `CarPropertyManager` · `VehiclePropertyIds.ENV_OUTSIDE_TEMPERATURE` (Pleos HVAC SDK에는 없음) | `android.car.permission.CAR_EXTERIOR_ENVIRONMENT` |
 
 ### 4.6 수용 기준
@@ -392,7 +392,7 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 
 - 결론: 앱 쪽 구현은 그대로 쓸 수 있고, 음성 호출은 Pleos의 스키마 승인·서버 등록이 끝나야 동작한다.
 - 승인 전 시연: `adb shell am broadcast -a ADJUST_CABIN_COMFORT -p com.pleos.cooldown --es ACTION_PARAM '{"feeling":"cold"}'`로 Gleo와 같은 Intent를 보내고, 영상에 "승인 후 '글레오' 음성으로 동작"이라고 표시한다.
-- 실험 코드: `spike/gleo-interface` 브랜치 (`data/gleo/GleoActionReceiver.kt`, `assets/schema.json`)
+- 구현: `data/gleo/GleoActionReceiver.kt`, `assets/schema.json`
 - 우리 앱만의 호출어("00아")는 두지 않는다. STT SDK에는 호출어 기능이 없고(`request()`로만 시작), 직접 만들려면 마이크를 상시 열어야 해서 Gleo와 마이크가 충돌하고 개인정보·심사 위험이 크다.
 
 ---
@@ -600,7 +600,7 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 
 | ID | 요구사항 |
 |---|---|
-| S1-01 | 온보딩은 3단계(소개 → 공조 자동 조절 동의·권한 → 학습·음성 안내)이고 정차 중에만 진행한다. 2단계에서 "나중에"를 고르면 F2·F3는 꺼진 채로 시작한다 (F2-08) |
+| S1-01 | 온보딩은 3단계(소개 → 공조 자동 조절 동의·권한 → 학습·음성 안내)이고 정차 중에만 진행한다. 2단계에서 "나중에"를 고르면 F2·F3는 꺼진 채로 시작한다 (F2-08). 온보딩을 마치기 전에 시작한 주행에서는 운전 습관만 배우고 공조 개입·음성 안내를 하지 않는다 |
 | S1-02 | 설정에서 F1·F2·F3·음성 안내를 켜고 끈다. F2 강도는 직접 고르지 않고 학습된 계절별 강도와 기준 온도를 보여 준다 (F2-07) |
 | S1-03 | "운전 습관 다시 배우기"는 C0 기준선과 `ComfortProfileEntity`를 지운다. "기록 전체 삭제"는 Trip·Intervention을 지운다 |
 | S1-04 | 설정과 온보딩은 정차 중에만 열 수 있다. 주행이 시작되면 주행 중 화면(SC-03)으로 바뀐다 |
@@ -619,7 +619,7 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 | `pleos.car.permission.TTS_SERVICE` | 음성 합성 (F2 안내, F3 제안) | F2 작업 때 추가 |
 | `pleos.car.permission.STT_SERVICE` | 음성 인식 (F2 응답창, F3 응답) | F2 작업 때 추가 |
 | (권한 없음) Gleo Action 수신기 | F2·F3 Gleo 연동 (4.8) | F2 작업 때 추가 |
-| `pleos.car.permission.NAVI_ROUTE` 계열 | 경로·TBT·경유지 | 필요한 것만 남김 (F1 작업 때 정리) |
+| `pleos.car.permission.NAVI_ROUTE` 계열 | 경로·회전 안내(TBT)·정체 조회 | F1 작업 때 추가. 실차 경로 연동을 확인한 뒤 쓰지 않는 권한을 줄인다 |
 | `CAR_INFO`, `CAR_ENERGY`, `pleos.car.permission.CAR_SPEED` | — | **삭제** (쓰지 않거나 존재하지 않음) |
 
 ---
@@ -630,20 +630,10 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 |---|---|---|
 | 단위 테스트 | C0 특징·기준선·점수, F2·F3 상태 머신, F1 구간 판정·문장 | JVM, 가짜 `Clock`, 녹화 시퀀스 |
 | 통합 확인 | D0 리스너, HVAC 제어, TTS·STT | Pleos Connect 에뮬레이터 + Virtual Console |
-| 시연 F2 | `f2_aggressive` (거친 운전 13분) | 디버그·demo 빌드 `--es scenario f2_aggressive` → `FakeVehicleDataSource` CSV 재생 |
+| 시연 F2 | `f2_aggressive` (거친 운전 13분) | 제출 빌드(release·debug) `--es scenario f2_aggressive` → `FakeVehicleDataSource` CSV 재생 |
 | 시연 F1·F3 | `f3_highway` (P 브리핑 → 고속도로 100km/h 56분 단조 주행 → 휴게소 P, 약 63분) | `--es scenario f3_highway`. 짝 파일 `f3_highway.route.csv`가 있으면 `ScenarioRouteSource`가 내비 경로 대신 분기·정체·휴게소를 주행 거리에 맞춰 준다 (경로 서버 없이 F1·F3 확인). 시나리오 모양은 `F3ScenarioTest`로 고정 |
 
-## 11. 기존 코드 처리
-
-| 기존 | 처리 | 시점 |
-|---|---|---|
-| `PleosVehicleDataSource` (속도 리스너 미등록, 기어만) | D0로 재작성 | 11/3 |
-| `appCategory="game"` | 제거 (기본값 사용). Pleos 마켓 카테고리는 콘솔 등록 정보에서 정함 `[확인 필요]` | 11/3 |
-| `TrafficViolation`, `DrivingScore`, 대시보드 점수 판정 | 삭제, C0로 교체 | 11/4 |
-| 대시보드·결과·기록·설정 화면 | **폐기.** `docs/screen-spec.md`대로 새로 만든다 | 11/9 |
-| `shared` 모듈의 `MyMusicService` (템플릿 잔재, `appCategory="audio"` 미디어 서비스로 등록됨) | automotive에서 `shared` 의존성 제거. 그래야 앱이 미디어 앱으로 병합되지 않음 | 11/3 완료 |
-
-## 11.5 에뮬레이터 확인 결과 (2026-11-05, Pleos_Connect_v2.0)
+## 11. 에뮬레이터 확인 결과 (2026-11-05, Pleos_Connect_v2.0)
 
 | 항목 | 결과 |
 |---|---|
@@ -658,7 +648,7 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 
 **에뮬레이터 한계·특이 사항:**
 - Pleos가 풍량 단계 목록과 풍향 지원 목록을 빈 값으로 준다 → 이 에뮬레이터에서는 풍량 +1, 얼굴 쪽 풍향이 동작하지 않는다 (VHAL 자체는 풍량 1~8)
-- VHAL 차속·기어 주입(`inject-vhal-event`)은 곧바로 덮어써진다 → 디버그 빌드의 시나리오 재생(`--es scenario`)이나 Virtual Console을 쓴다
+- VHAL 차속·기어 주입(`inject-vhal-event`)은 곧바로 덮어써진다 → 시나리오 재생(`--es scenario`, 공모전 제출 빌드에서 열어 둠)이나 Virtual Console을 쓴다
 - 앱은 운전자 프로필(Android 사용자 10)로 돈다. `adb` broadcast는 `--user current`가 필요하다 (F2-24의 프로필별 분리와 일치)
 - 서버에 스키마가 등록되지 않은 상태에서 Gleo Action을 `adb`로 보내면, Gleo가 응답 생성 서버 요청에서 `HTTP 404`로 죽는다 (Gleo 앱 쪽 문제, 문의 필요)
 - TBT는 경로 안내 중에만 와서 휴게소 판정은 F1 경로 연동 때 확인한다
@@ -675,7 +665,7 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
   - `cmd car_service set-property-value`로 불리언 속성에 `1`을 넣으면 false로 들어간다. `true`를 쓴다.
 - 2026-11-13 재녹화: 브리핑·직전 안내 2회, 외기 전환 2회(각 5분 뒤 복원), 버티기 24 → 23℃, 휴게소 제안("12km 앞")·Gleo 수락·입구 안내·휴식 요령, 정차 후 공조 원래대로(24℃·내기순환), 리포트 "도와드린 횟수 4번". 에뮬레이터가 탑승 인원을 3명 이상으로 줘서 외기 전환은 15분 기준으로 동작했다.
 
-## 12. 미확인 항목
+## 12. 남은 확인 항목 (실차·플랫폼)
 
 | 항목 | 영향 | 확인 방법 | 대안 |
 |---|---|---|---|
@@ -683,12 +673,9 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 | `onTBTInfo` 범위 | F1 | 에뮬레이터 모의 주행 로그 | F1-04 |
 | POI(휴게소) 검색 | F3 | NaviHelper jar·문서 | F3-04 |
 | 주행 거리 단위 | F4 | 에뮬레이터 로그 | — |
-| 공모전 시연에서 LLM 사용 가능 여부 | X1 | — | 템플릿 문장 |
 | Gleo 스키마 승인·서버 등록 절차와 기간 | F2 경로 ③, F3 보조 경로 | Pleos Playground 문의 (배포·심사 문서 17개에는 언급 없음) | `adb` broadcast로 시연 (4.8) |
 | App Schema `invokeWord` 필드의 의미 | F2 경로 ③ | 문의 (문서 예시에만 있고 설명 없음) | 생략 |
 | TTS 직후 STT 자동 시작 시 차량 UI·알림음 | F2-11 | 에뮬레이터 실험 | 응답창 없이 경로 ①·③만 사용 |
-| 에뮬레이터·차량의 `ENV_OUTSIDE_TEMPERATURE` 제공 여부 | F2-19 | 에뮬레이터 `cmd car_service get-property-value` | 달로 판단 |
-| 풍향·통풍시트 제어 권한 | 4.7.1 (겨울·여름 수단) | SDK jar 권한 어노테이션, 문서 | 해당 수단 없이 온도·풍량만 |
 | 실내 공기 예방(F3-P3)의 기준 시간 15분·30분 | F3 예방 | 차량에 CO2 센서 API가 없어 추정 규칙으로 둠. 에뮬레이터 모의 주행·실차로 조정 | 기준 시간을 보수적으로 유지 |
 | Pleos 운전자 프로필 = Android 사용자 1:1 여부 | F2-24 (운전자별 학습) | 에뮬레이터에서 프로필 전환 후 `am get-current-user` | 프로필 구분 없이 학습 (한계로 명시) |
 | 차량 화면 해상도별 레이아웃·타이포그래피 토큰 | 화면 명세 | Pleos 디자인 가이드 | 14.6 기준 단일 레이아웃 |

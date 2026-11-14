@@ -13,6 +13,18 @@ data class CopilotSettings(
     /** SC-01 온보딩을 마쳤는지 */
     val onboardingDone: Boolean = false,
 ) {
+    /**
+     * 주행에 실제로 적용할 설정. 첫 실행 동의(온보딩)를 마치기 전에는 운전 습관만 배우고,
+     * 공조 개입·음성 안내는 하지 않는다 (S1-01, 투명성: 동의 없이 차를 바꾸지 않는다)
+     */
+    val active: CopilotSettings
+        get() = if (onboardingDone) this else copy(
+            cooldownEnabled = false,
+            fatigueEnabled = false,
+            briefingEnabled = false,
+            voiceEnabled = false,
+        )
+
     companion object {
         val DEFAULT = CopilotSettings()
     }

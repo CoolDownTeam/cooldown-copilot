@@ -146,7 +146,7 @@ object TripSummarizer {
             }
             InterventionKind.FATIGUE_SUGGEST -> when (r.result) {
                 InterventionResult.RESTED -> "휴게소를 제안했어요 · 들르셨어요"
-                InterventionResult.ACCEPTED -> "휴게소를 제안했어요 · 경로에 넣었어요"
+                InterventionResult.ACCEPTED -> "휴게소를 제안했어요 · 들르기로 하셨어요"
                 else -> "휴게소를 제안했어요 · 다음에 쉬기로 했어요"
             }
         }

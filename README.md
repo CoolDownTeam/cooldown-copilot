@@ -12,30 +12,41 @@ Pleos Connect(AAOS 기반) 차량용 앱입니다. 현대자동차그룹 차량�
 | [`apk/CoolDownTeam_CooldownCopilot_release.apk`](apk/CoolDownTeam_CooldownCopilot_release.apk) | **제출본.** release 빌드 (R8 축소, release 키 서명, versionName 1.1) |
 | [Release v1.1](https://github.com/CoolDownTeam/cooldown-copilot/releases/tag/v1.1) | 같은 APK와 debug APK, 시연 영상 2개, 화면 시안 |
 
+### 먼저 영상으로 보기 (각 약 4분)
+- [자막판](https://github.com/CoolDownTeam/cooldown-copilot/releases/download/v1.1/CoolDownCopilot_demo.mp4): 쿨다운 → 코스 브리핑 → 피로 케어 → 리포트 → 설정을 기능별로 짧게
+- [명령 화면판](https://github.com/CoolDownTeam/cooldown-copilot/releases/download/v1.1/CoolDownCopilot_demo_commands.mp4): 같은 장면에 실제로 보낸 `adb` 명령과 앱 로그를 함께 표시
+
+![화면 시안: 첫 실행 동의, 홈, 주행 중 2종, 도착 리포트, 설정](docs/screens.png)
+
 ### 테스트 환경
 - macOS (Apple Silicon), Android Studio, **Pleos Connect Emulator** AVD `Pleos_Connect_v2.0` (AAOS, Android 14 기반)
 - Pleos SDK: Vehicle·NaviHelper 2.0.3, TextToSpeech·SpeechToText 3.3.1
 - 앱은 차량의 운전자 프로필(Android 사용자 10)에서 실행됩니다. `adb` 명령에 `--user 10` 또는 `--user current`가 필요합니다.
 
 ### 필요한 설정
-- 첫 실행 때 정차 상태에서 동의 3단계와 권한 요청(위치·알림)에 "허용"을 누릅니다.
+- **첫 실행 동의가 먼저입니다.** 앱은 동의 3단계를 마치기 전에는 운전 습관만 배우고 공조·음성 개입을 하지 않습니다. 그래서 시연을 재생하기 전에 앱을 한 번 열어 동의를 마쳐야 합니다(아래 실행 방법 2단계).
 - 공조 제어 권한(`CONTROL_CAR_CLIMATE`, `CONTROL_CAR_SEATS`)은 매니페스트에 선언돼 있고 에뮬레이터에서는 설치만으로 동작했습니다. 실차 배포 때는 Pleos App Market 사전 승인이 필요합니다.
-- 에뮬레이터에서 차속·기어를 직접 넣으면 곧바로 덮어써지므로, 주행은 녹화해 둔 차량 신호를 재생해서 확인합니다(아래 3단계). 이 재생 기능은 공모전 제출 빌드에서만 열려 있습니다(`BuildConfig.DEMO_SCENARIOS`).
+- 에뮬레이터에서 차속·기어를 직접 넣으면 곧바로 덮어써지므로, 주행은 녹화해 둔 차량 신호를 재생해서 확인합니다(아래 실행 방법 4단계). 이 재생 기능은 공모전 제출 빌드에서만 열려 있습니다(`BuildConfig.DEMO_SCENARIOS`).
 
 ### 실행 방법
 1. 에뮬레이터를 켜고 APK를 설치합니다.
    ```bash
    adb install -r apk/CoolDownTeam_CooldownCopilot_release.apk
    ```
-2. (권장) 공조를 켜고 설정 온도 24℃, 발밑 바람, 내기순환으로 맞춥니다.
+2. 앱을 열고 첫 실행 동의 3단계를 마칩니다. 화면에서 "다음" → "허용" → 권한 창 2개(위치·알림)에서 "허용" → "시작하기"를 누르면 홈 화면이 나옵니다.
+   ```bash
+   adb shell am start --user 10 -n com.pleos.cooldown/.presentation.MainActivity
+   ```
+3. 공조를 켜고 설정 온도 24℃, 발밑 바람, 내기순환으로 맞춥니다(공조가 꺼져 있으면 개입하지 않습니다).
    ```bash
    for a in "0x15200510 0x75 true" "0x15600503 0x1 24" "0x15400501 0x5 2" "0x15200508 0x75 true"; do adb shell cmd car_service set-property-value $a; done
    ```
-3. 시연 시나리오를 재생합니다. Gleo 응답 명령은 아래 "시연 재생" 절에 있습니다.
+4. 시연 시나리오를 재생합니다. Gleo 응답 명령은 아래 "시연 재생" 절에 있습니다.
    ```bash
    adb shell am start --user 10 -S -n com.pleos.cooldown/.presentation.MainActivity --es scenario f2_aggressive
    ```
-   - `f2_aggressive` (약 13분): 쿨다운 1·2단계 → 복원 → 도착 리포트. 1단계(23℃)가 된 뒤 Gleo "추워"를 보내면 바로 24℃로 돌아갑니다.
+   - `f2_aggressive` (약 13분): 시작 약 1분 뒤 1단계(음성 "조금 시원하게 해 드릴게요", 화면 아래 공조 바 24℃ → 23℃), 2분 뒤 2단계(22℃·통풍시트), 차분해지고 5분 뒤 복원, P단 1분 뒤 도착 리포트. 1단계가 된 뒤 Gleo "추워"를 보내면 바로 24℃로 돌아갑니다.
+   - 왼쪽 계기판의 기어·속도 표시는 에뮬레이터 고정 화면이라 바뀌지 않습니다. 재생 신호는 앱에만 들어갑니다.
    - `f3_highway` (약 63분): 코스 브리핑 → 1km 전 안내 → 환기 → 졸음 케어 → 휴게소 제안(8초 안에 Gleo "응") → 입구 안내 → 휴식 요령 → 리포트.
 
 
@@ -116,7 +127,7 @@ flowchart LR
 | F1 코스 브리핑 | ✅ 완료, 에뮬레이터 확인 (시연용 경로) |
 | F4 주행 리포트 · 화면 6종 (SC-01~06) | ✅ 완료 |
 
-단위 테스트 175개. 에뮬레이터 확인 기록은 [docs/feature-spec.md](docs/feature-spec.md) 11.5절에 있습니다.
+단위 테스트 177개. 에뮬레이터 확인 기록은 [docs/feature-spec.md](docs/feature-spec.md) 11절에 있습니다.
 
 ### 알려진 제약
 - 공조 제어 권한(`CONTROL_CAR_CLIMATE`, `CONTROL_CAR_SEATS`)은 Pleos App Market 사전 승인이 필요합니다. 에뮬레이터에서는 이 권한으로 실제 VHAL 공조 값을 바꿔 확인했습니다.

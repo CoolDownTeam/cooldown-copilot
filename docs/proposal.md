@@ -4,7 +4,7 @@
 
 ## 1. 앱 한 줄 소개
 
-평소의 나를 배운 AI가 운전이 거칠어지면 실내를 살짝 식혀 주고, 졸음은 실내 공기로 미리 막고 조향으로 알아채 실제로 쉬어 가게 만드는, 말 걸지 않는 차량 코파일럿입니다.
+평소의 나를 배운 AI가 운전이 거칠어지면 실내를 살짝 식혀 주고, 졸음은 실내 공기로 미리 막고 조향으로 알아채 실제로 쉬어 가게 만드는, 경고 대신 공기로 먼저 돌보는 차량 코파일럿입니다.
 
 ## 2. 기획 배경
 
@@ -24,8 +24,9 @@
 
 - 차는 속도·브레이크·조향으로 운전자 상태를 읽을 수 있습니다. 졸리면 조향의 작은 보정이 줄어듭니다 (Sahayadhas 외, 2012).
 - 실내 환경은 운전에 영향을 줍니다. 실내 27℃에서는 21℃보다 놓친 신호가 50% 늘고 반응이 22% 늦어졌습니다 (Wyon 외, 1996). 내기순환을 오래 쓰면 CO2가 쌓이고 (Hudda & Fruin, 2018), CO2 1,000ppm부터 판단력이 떨어집니다 (Satish 외, 2012).
+- 더울수록 운전이 날카로워진다는 현장 연구도 있습니다. 기온이 높을수록 앞차에 경적을 더 오래 울렸습니다 (Kenrick & MacFarlane, 1986). 다만 실험실 연구는 결과가 엇갈리므로(Lynott 외, 2023), 이 앱은 효과를 단정하지 않고 개입할 때마다 운전자별 회복 시간을 재서 확인합니다.
 - 다만 찬 바람만으로는 졸음을 깨울 수 없습니다. 효과가 잠깐이고, 실제로 듣는 것은 짧은 낮잠과 카페인입니다 (Reyner & Horne, 1998; Horne & Reyner, 1996).
-- 그래서 이 앱은 말을 거는 대신 공기로 먼저 대응하고, 졸음은 공기로 "예방", 조향으로 "감지", 한마디로 "휴식 유도" 합니다.
+- 그래서 이 앱은 경고하는 대신 공기로 먼저 대응하고(알림은 한 문장뿐), 졸음은 공기로 "예방", 조향으로 "감지", 한마디로 "휴식 유도" 합니다.
 
 ## 3. 앱 주요 기능 및 차량 특화 요소
 
@@ -89,7 +90,7 @@
 
 ### 진행 현황 (작성일 기준)
 
-- 핵심 기능 C0·F1·F2·F3·F4와 화면 6종(온보딩·홈·주행 중·리포트·기록·설정)을 구현했습니다. 단위 테스트 175개가 가상 시간으로 몇 시간짜리 주행을 재현해 검증합니다.
+- 핵심 기능 C0·F1·F2·F3·F4와 화면 6종(온보딩·홈·주행 중·리포트·기록·설정)을 구현했습니다. 단위 테스트 177개가 가상 시간으로 몇 시간짜리 주행을 재현해 검증합니다.
 - Cloudflare가 공개한 보안 점검 절차(security-audit-skill)로 코드를 점검했습니다. 운전자 우선 규칙이 풍향에서 지켜지지 않던 결함(김서림 제거 바람을 얼굴 쪽으로 바꿀 수 있음)을 찾아 고치고 테스트로 고정했습니다.
 - Pleos Connect 에뮬레이터에서 F2 전체 흐름(1단계 −1℃·음성 → 2단계 −2℃·통풍시트 → Gleo "추워" 즉시 복원 → 강도 학습 저장)과 화면 전환을 확인했습니다. 시연용 고속도로 경로로 약 1시간 주행을 재생해 F1 브리핑·1km 전 안내, F3 환기 → 졸음 케어(−1℃) → "12km 앞 휴게소" 제안·Gleo "응" → 입구 안내 → 휴식 요령 → 공조 원래대로, 도착 리포트까지 확인했습니다.
 
@@ -177,6 +178,7 @@
 ## 출처 (원문 링크와 요약은 `docs/research.md`)
 - Wyon, D. P., Wyon, I., & Norin, F. (1996). Effects of moderate heat stress on driver vigilance in a moving vehicle. *Ergonomics*, 39(1), 61–75. doi:10.1080/00140139608964434
 - Kenrick, D. T., & MacFarlane, S. W. (1986). Ambient temperature and horn honking: A field study of the heat/aggression relationship. *Environment and Behavior*, 18(2), 179–191. doi:10.1177/0013916586182002
+- Lynott, D., Corker, K., Connell, L., & O'Brien, K. (2023). The effects of temperature on prosocial and antisocial behaviour: A review and meta-analysis. *British Journal of Social Psychology*, 62(3), 1177–1214. doi:10.1111/bjso.12626
 - Sahayadhas, A., Sundaraj, K., & Murugappan, M. (2012). Detecting driver drowsiness based on sensors: A review. *Sensors*, 12(12), 16937–16953. doi:10.3390/s121216937
 - Yi, D., Su, J., Liu, C., Quddus, M., & Chen, W. (2019). A machine learning based personalized system for driving state recognition. *Transportation Research Part C*, 105, 241–261. doi:10.1016/j.trc.2019.05.042
 - Hudda, N., & Fruin, S. A. (2018). Carbon dioxide accumulation inside vehicles: The effect of ventilation and driving conditions. *Science of the Total Environment*, 610–611, 1448–1456. doi:10.1016/j.scitotenv.2017.08.105
