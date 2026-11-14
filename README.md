@@ -2,7 +2,42 @@
 
 > 평소의 나를 학습한 AI가 운전이 거칠어지면 실내를 식혀 주고, 졸음은 실내 공기로 미리 막고 조향으로 잡아 **실제로 쉬게 만드는** 무상호작용 코파일럿.
 
-Pleos Connect(AAOS 기반) 차량용 앱입니다. 현대자동차그룹 차량용 앱 개발 공모전 출품작입니다. 설치 파일과 시연 영상은 [Release v1.1](https://github.com/CoolDownTeam/cooldown-copilot/releases/tag/v1.1)에 있습니다.
+Pleos Connect(AAOS 기반) 차량용 앱입니다. 현대자동차그룹 차량용 앱 개발 공모전 출품작입니다.
+
+## 심사용 안내
+
+### APK
+| 파일 | 내용 |
+|---|---|
+| [`apk/CoolDownTeam_CooldownCopilot_release.apk`](apk/CoolDownTeam_CooldownCopilot_release.apk) | **제출본.** release 빌드 (R8 축소, release 키 서명, versionName 1.1) |
+| [Release v1.1](https://github.com/CoolDownTeam/cooldown-copilot/releases/tag/v1.1) | 같은 APK와 debug APK, 시연 영상 2개, 화면 시안 |
+
+### 테스트 환경
+- macOS (Apple Silicon), Android Studio, **Pleos Connect Emulator** AVD `Pleos_Connect_v2.0` (AAOS, Android 14 기반)
+- Pleos SDK: Vehicle·NaviHelper 2.0.3, TextToSpeech·SpeechToText 3.3.1
+- 앱은 차량의 운전자 프로필(Android 사용자 10)에서 실행됩니다. `adb` 명령에 `--user 10` 또는 `--user current`가 필요합니다.
+
+### 필요한 설정
+- 첫 실행 때 정차 상태에서 동의 3단계와 권한 요청(위치·알림)에 "허용"을 누릅니다.
+- 공조 제어 권한(`CONTROL_CAR_CLIMATE`, `CONTROL_CAR_SEATS`)은 매니페스트에 선언돼 있고 에뮬레이터에서는 설치만으로 동작했습니다. 실차 배포 때는 Pleos App Market 사전 승인이 필요합니다.
+- 에뮬레이터에서 차속·기어를 직접 넣으면 곧바로 덮어써지므로, 주행은 녹화해 둔 차량 신호를 재생해서 확인합니다(아래 3단계). 이 재생 기능은 공모전 제출 빌드에서만 열려 있습니다(`BuildConfig.DEMO_SCENARIOS`).
+
+### 실행 방법
+1. 에뮬레이터를 켜고 APK를 설치합니다.
+   ```bash
+   adb install -r apk/CoolDownTeam_CooldownCopilot_release.apk
+   ```
+2. (권장) 공조를 켜고 설정 온도 24℃, 발밑 바람, 내기순환으로 맞춥니다.
+   ```bash
+   for a in "0x15200510 0x75 true" "0x15600503 0x1 24" "0x15400501 0x5 2" "0x15200508 0x75 true"; do adb shell cmd car_service set-property-value $a; done
+   ```
+3. 시연 시나리오를 재생합니다. Gleo 응답 명령은 아래 "시연 재생" 절에 있습니다.
+   ```bash
+   adb shell am start --user 10 -S -n com.pleos.cooldown/.presentation.MainActivity --es scenario f2_aggressive
+   ```
+   - `f2_aggressive` (약 13분): 쿨다운 1·2단계 → 복원 → 도착 리포트. 1단계(23℃)가 된 뒤 Gleo "추워"를 보내면 바로 24℃로 돌아갑니다.
+   - `f3_highway` (약 63분): 코스 브리핑 → 1km 전 안내 → 환기 → 졸음 케어 → 휴게소 제안(8초 안에 Gleo "응") → 입구 안내 → 휴식 요령 → 리포트.
+
 
 ---
 
@@ -133,7 +168,13 @@ Android Studio에서 Pleos Connect Emulator(AVD)를 설치한 뒤:
 ./gradlew :automotive:lintDebug -q
 ```
 
-### 시연 재생 (debug·demo 빌드)
+제출용 release APK를 `apk/`에 다시 만들려면 (release 키는 저장소 밖 `~/.android-keys/cooldown-release.properties`에 있어야 서명됩니다):
+
+```bash
+./gradlew :automotive:clean :automotive:exportReleaseApk -q
+```
+
+### 시연 재생 (release·debug·demo 빌드)
 
 녹화해 둔 차량 신호를 재생합니다. 앱은 운전자 프로필(사용자 10)에서 돕니다.
 

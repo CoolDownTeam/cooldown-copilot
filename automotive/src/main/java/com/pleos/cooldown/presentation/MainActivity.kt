@@ -1,7 +1,6 @@
 package com.pleos.cooldown.presentation
 
 import android.Manifest
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
@@ -10,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.ViewModelProvider
+import com.pleos.cooldown.BuildConfig
 import com.pleos.cooldown.CooldownApplication
 import com.pleos.cooldown.data.hvac.OutsideTemperatureSource
 import com.pleos.cooldown.data.vehicle.PleosVehicleDataSource
@@ -53,12 +53,12 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 디버그 빌드에서만:
+     * 시연 재생을 연 빌드에서만 (`BuildConfig.DEMO_SCENARIOS`, 공모전 제출 빌드는 release 포함):
      * - `--es scenario f2_aggressive`: 녹화한 차량 신호 재생
      * - `--es demo_route "위도,경도,이름"`: 내비 경로 요청 (F1 확인용). `--ez demo_simulate true`면 모의 주행 시작
      */
     private fun useScenarioIfRequested() {
-        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
+        if (!BuildConfig.DEMO_SCENARIOS) return
         intent.getStringExtra(EXTRA_SCENARIO)?.let { name ->
             Log.i(TAG, "scenario $name used=${container.useScenario(name)}")
         }

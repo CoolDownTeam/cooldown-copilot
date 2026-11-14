@@ -16,6 +16,8 @@ local.properties
 .kotlin
 build/
 *.apk
+# 공모전 GitHub 제출 규칙: release APK는 apk/ 폴더에 올린다
+!/apk/*.apk
 *.aab
 *.jks
 *.keystore

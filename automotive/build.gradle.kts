@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -13,19 +15,40 @@ android {
         applicationId = "com.pleos.cooldown"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // 공모전 제출 빌드: 에뮬레이터에서 차속·기어를 직접 넣을 수 없어서, 녹화한 차량 신호 재생(--es scenario)을 release에서도 연다.
+        // 정식 출시 때는 false로 바꾼다 (재생 중에는 실제 차량 신호 대신 녹화 신호를 쓰기 때문)
+        buildConfigField("boolean", "DEMO_SCENARIOS", "true")
+    }
+
+    // release 서명 키는 저장소 밖(~/.android-keys/cooldown-release.properties)에 둔다. 없으면 서명 없이 빌드된다
+    val releaseKeyFile = File(System.getProperty("user.home"), ".android-keys/cooldown-release.properties")
+    signingConfigs {
+        if (releaseKeyFile.exists()) {
+            val key = Properties().apply { releaseKeyFile.inputStream().use { load(it) } }
+            create("release") {
+                storeFile = File(key.getProperty("storeFile"))
+                storePassword = key.getProperty("storePassword")
+                keyAlias = key.getProperty("keyAlias")
+                keyPassword = key.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.findByName("release")
+            // 실차(arm64-v8a)와 PC 에뮬레이터(x86_64)용 네이티브 라이브러리만 남긴다
+            ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         }
         // 심사 제출용: debug와 같은 시연 기능(시나리오 재생)을 두고 R8 코드·리소스 축소만 더한다
         create("demo") {
@@ -41,8 +64,9 @@ android {
             ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         }
     }
-    // demo 빌드도 시연 시나리오(src/debug/assets)를 담는다
+    // demo·release 빌드도 시연 시나리오(src/debug/assets)를 담는다
     sourceSets.getByName("demo").assets.srcDir("src/debug/assets")
+    sourceSets.getByName("release").assets.srcDir("src/debug/assets")
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -52,6 +76,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     // AAOS CarPropertyManager (차속)
     useLibrary("android.car")
@@ -115,4 +140,12 @@ tasks.register<Copy>("exportSubmissionDemoApk") {
     from(layout.buildDirectory.dir("outputs/apk/demo")) { include("*-demo.apk") }
     rename { "CoolDownCopilot_r8.apk" }
     into(rootProject.layout.projectDirectory.dir("submission"))
+}
+
+// 공모전 GitHub 제출 규칙: release APK를 저장소 apk/ 폴더에 팀명_앱이름_release.apk로 둔다
+tasks.register<Copy>("exportReleaseApk") {
+    dependsOn("assembleRelease")
+    from(layout.buildDirectory.dir("outputs/apk/release")) { include("*-release.apk") }
+    rename { "CoolDownTeam_CooldownCopilot_release.apk" }
+    into(rootProject.layout.projectDirectory.dir("apk"))
 }
