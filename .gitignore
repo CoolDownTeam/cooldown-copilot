@@ -25,3 +25,10 @@ build/
 
 # 공모전 제출물 (APK·영상)
 /submission/
+
+# 저장소에 올리지 않는 로컬 파일: 개발 도구 설정, 내부 일정, 쓰지 않는 템플릿 모듈
+/CLAUDE.md
+/.claude/
+/docs/schedule.md
+/mobile/
+/shared/

@@ -154,7 +154,7 @@ automotive/src/main/java/com/pleos/cooldown/
 
 ## 빌드·테스트
 
-Android Studio에서 Pleos Connect Emulator(AVD)를 설치한 뒤:
+Android Studio에서 Pleos Connect Emulator(AVD)를 설치한 뒤 이 저장소를 엽니다. 명령줄에서 빌드할 때는 `local.properties`의 `sdk.dir`이나 `ANDROID_HOME`으로 Android SDK 경로를 알려 줘야 합니다.
 
 ```bash
 ./gradlew :automotive:assembleDebug -q
@@ -205,8 +205,7 @@ adb shell "am broadcast --user current -a ANSWER_REST_SUGGESTION -p com.pleos.co
 
 | 문서 | 내용 |
 |---|---|
-| [docs/proposal.md](docs/proposal.md) | 기획서 (공모전 양식 02장) |
+| [docs/proposal.md](docs/proposal.md) | 기획서 (공모전 제출 양식 02장과 같은 내용) |
 | [docs/feature-spec.md](docs/feature-spec.md) | 상세 기능명세서 (요구사항 ID, 상태 머신, 수용 기준) |
 | [docs/screen-spec.md](docs/screen-spec.md) | 화면 명세 (SC-01~06) |
 | [docs/research.md](docs/research.md) | 근거 자료와 한계 |
-| [docs/schedule.md](docs/schedule.md) | 개발 일정 |

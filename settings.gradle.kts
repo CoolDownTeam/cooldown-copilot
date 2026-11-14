@@ -21,6 +21,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "CooldownCopilot"
-include(":mobile")
 include(":automotive")
-include(":shared")
