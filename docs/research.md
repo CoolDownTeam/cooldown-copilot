@@ -6,7 +6,7 @@
 
 ---
 
-## 1. 실내 온도는 운전자의 경계를 떨어뜨린다 (F2의 핵심 근거)
+## 1. 실내 온도와 운전자의 주의력 (F2의 핵심 근거)
 
 **Wyon, D. P., Wyon, I., & Norin, F. (1996).** Effects of moderate heat stress on driver vigilance in a moving vehicle. *Ergonomics*, 39(1), 61–75. [doi:10.1080/00140139608964434](https://doi.org/10.1080/00140139608964434) · PMID [8851073](https://pubmed.ncbi.nlm.nih.gov/8851073/)
 
@@ -25,18 +25,18 @@
 
 ## 2. 더위와 공격성 (F2의 보조 근거와 반대 근거)
 
-### 2.1 현장 연구: 더울수록 경적이 늘었다
+### 2.1 현장 연구: 기온이 높을수록 경적 사용 증가
 **Kenrick, D. T., & MacFarlane, S. W. (1986).** Ambient temperature and horn honking: A field study of the heat/aggression relationship. *Environment and Behavior*, 18(2), 179–191. [doi:10.1177/0013916586182002](https://doi.org/10.1177/0013916586182002)
 
 - 미국 피닉스에서 초록불에 멈춰 선 차 뒤의 운전자를 75회 관찰했다. 기온이 높을수록 경적을 누른 시간이 **직선적으로** 늘었다.
 - 창문을 연 운전자, 즉 에어컨을 쓰지 않았을 운전자만 보면 결과가 더 강했다.
 
-### 2.2 리뷰: 열 가설
+### 2.2 문헌 검토: 열 가설
 **Anderson, C. A., Anderson, K. B., Dorr, N., DeNeve, K. M., & Flanagan, M. (2000).** Temperature and aggression. *Advances in Experimental Social Psychology*, 32, 63–133. [doi:10.1016/S0065-2601(00)80004-0](https://doi.org/10.1016/S0065-2601(00)80004-0)
 
 - 더위가 공격 동기를 높인다는 "열 가설(heat hypothesis)"을 현장·실험실 연구로 정리한 리뷰다.
 
-### 2.3 반대 근거: 실험실 메타분석에서는 효과가 없었다
+### 2.3 반대 근거: 실험실 메타분석에서는 효과 없음
 **Lynott, D., Corker, K., Connell, L., & O'Brien, K. (2023).** The effects of temperature on prosocial and antisocial behaviour: A review and meta-analysis. *British Journal of Social Psychology*, 62(3), 1177–1214. [doi:10.1111/bjso.12626](https://doi.org/10.1111/bjso.12626)
 
 - 80개 효과 크기(총 4,577명)를 분석한 결과, 온도가 친사회·반사회 행동에 주는 **신뢰할 만한 효과는 없었다.** 대부분 실험실 연구다.
@@ -45,7 +45,7 @@
 
 ---
 
-## 3. 조향으로 졸음을 알 수 있다 (C0 피로 점수의 근거)
+## 3. 조향 패턴을 이용한 졸음 감지 (C0 피로 점수의 근거)
 
 **Sahayadhas, A., Sundaraj, K., & Murugappan, M. (2012).** Detecting driver drowsiness based on sensors: A review. *Sensors*, 12(12), 16937–16953. [doi:10.3390/s121216937](https://doi.org/10.3390/s121216937) · 원문 [PMC3571819](https://pmc.ncbi.nlm.nih.gov/articles/PMC3571819/)
 
@@ -70,7 +70,7 @@
 
 ---
 
-## 4. 개인 기준선이 정확도를 높인다 (C0의 근거)
+## 4. 개인 기준선의 정확도 향상 효과 (C0의 근거)
 
 **Yi, D., Su, J., Liu, C., Quddus, M., & Chen, W. (2019).** A machine learning based personalized system for driving state recognition. *Transportation Research Part C: Emerging Technologies*, 105, 241–261. [doi:10.1016/j.trc.2019.05.042](https://doi.org/10.1016/j.trc.2019.05.042)
 
@@ -82,11 +82,11 @@
 
 ---
 
-## 5. 졸음: 공조는 "깨우기"가 아니라 "예방과 버티기" (F3의 근거)
+## 5. 졸음 대응: 공조의 역할은 "깨우기"가 아닌 "예방과 버티기" (F3의 근거)
 
 F3는 세 단계로 설계했다. 각 단계의 근거를 아래에 정리한다. 핵심은 **공조로 졸음을 해결한다고 주장하지 않는 것**이다.
 
-### 5.1 왜 공조로 "깨운다"고 하면 안 되나
+### 5.1 공조만으로 졸음을 깨울 수 없는 이유
 **Reyner, L. A., & Horne, J. A. (1998).** Evaluation of "in-car" countermeasures to sleepiness: Cold air and radio. *Sleep*, 21(1), 46–50. PMID [9485532](https://pubmed.ncbi.nlm.nih.gov/9485532/)
 
 - 잠을 5시간만 잔 운전자 16명이 시뮬레이터로 2.5시간 운전했다. 얼굴로 보내는 찬 바람은 처음 30분 정도만 약간 효과가 있었고, 전체로는 유의하지 않았다.
@@ -94,7 +94,7 @@ F3는 세 단계로 설계했다. 각 단계의 근거를 아래에 정리한다
 
 → 찬 바람은 **휴게소까지 버티게 하는 보조 수단**(F3 `HOLD_ON`)으로만 쓴다. 논문이 제안한 역할과 같다.
 
-### 5.2 ① 예방: 내기순환이 길어지면 실내 CO2가 쌓인다
+### 5.2 ① 예방: 장시간 내기순환과 실내 이산화탄소 누적
 **Hudda, N., & Fruin, S. A. (2018).** Carbon dioxide accumulation inside vehicles: The effect of ventilation and driving conditions. *Science of the Total Environment*, 610–611, 1448–1456. [doi:10.1016/j.scitotenv.2017.08.105](https://doi.org/10.1016/j.scitotenv.2017.08.105) · PMID [28873666](https://pubmed.ncbi.nlm.nih.gov/28873666/)
 
 - 환기 설정, 차량 연식, 속도, 실내 부피, 주행 시간, 탑승 인원이 CO2 누적에 주는 영향을 분석했다.
@@ -114,7 +114,7 @@ F3는 세 단계로 설계했다. 각 단계의 근거를 아래에 정리한다
 
 → 졸음이 오기 **전에** 내기순환 시간을 관리한다(F3 `FreshAirPolicy`). 차량에 CO2 센서 API가 없어서 Hudda & Fruin의 조건(탑승 인원·주행 시간)으로 **추정**하고, 기준 시간을 그 결과보다 보수적으로 잡는다. "졸음을 깨운다"가 아니라 "**졸음을 부르는 실내 조건을 없앤다**"는 주장이므로 근거와 맞는다. 실내 더위가 경계를 떨어뜨린다는 근거(1절, Wyon 외 1996)도 같은 논리지만, 온도는 운전자가 정한 값이라 예방 단계에서는 바꾸지 않고 F2와 `HOLD_ON`에서만 다룬다.
 
-### 5.3 ② 감지: 운전자는 자기 졸음을 모른다
+### 5.3 ② 감지: 운전자의 졸음 인식 한계
 **Gaspar, J. G., & Carney, C. (2023).** *Drowsiness and Decision Making During Long Drives: A Driving Simulation Study* (Research Report). AAA Foundation for Traffic Safety, Washington, D.C. [보고서 페이지](https://aaafoundation.org/drowsiness-and-decision-making-during-long-drives-a-driving-simulation-study/)
 
 - 약 3시간 야간 모의 주행에 휴게소를 일정 간격으로 두고, 쉬어 갈지를 참가자가 정하게 했다.
@@ -122,7 +122,7 @@ F3는 세 단계로 설계했다. 각 단계의 근거를 아래에 정리한다
 
 → 자기 판단에 맡기지 않고 조향으로 객관적으로 잡는다(C0 피로 점수, 근거는 3절).
 
-### 5.4 ③ 휴식 유도: 경고로는 쉬지 않는다, 쉬는 방법도 중요하다
+### 5.4 ③ 휴식 유도: 경고만으로는 부족하며, 휴식 방법도 중요
 **Gaspar & Carney (2023)**, 같은 보고서
 
 - 참가자의 **약 절반이 한 번도 쉬지 않았다.**
@@ -151,7 +151,7 @@ F3는 세 단계로 설계했다. 각 단계의 근거를 아래에 정리한다
 
 ---
 
-## 6. 규제: 졸음 경고는 이미 의무다
+## 6. 규제: 졸음 경고 의무화
 
 **Regulation (EU) 2019/2144** of the European Parliament and of the Council of 27 November 2019 on type-approval requirements for motor vehicles … (General Safety Regulation). *Official Journal of the European Union*, L 325, 16.12.2019. [EUR-Lex 원문](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32019R2144)
 
@@ -163,9 +163,9 @@ F3는 세 단계로 설계했다. 각 단계의 근거를 아래에 정리한다
 
 ---
 
-## 7. 문제의 크기 (통계)
+## 7. 문제의 규모 (통계)
 
-### 7.1 공격적 운전은 대다수 운전자가 한다
+### 7.1 공격적 운전의 보편성
 **AAA Foundation for Traffic Safety (2016).** *Prevalence of Self-Reported Aggressive Driving Behavior: United States, 2014* (Technical Report). Washington, D.C. [보고서 PDF](https://aaafoundation.org/wp-content/uploads/2026/01/Prevalence-of-Aggressive-Drivig-2014.pdf)
 
 - 미국 운전자 2,705명 대상 전국 대표 표본 조사. "78% of U.S. drivers reported having engaged in at least one aggressive driving behavior at least once in the past year."
