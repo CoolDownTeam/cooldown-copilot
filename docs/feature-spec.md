@@ -630,7 +630,7 @@ Gleo AI(호출어 "글레오")가 사용자 발화를 LLM으로 해석해서, �
 |---|---|---|
 | 단위 테스트 | C0 특징·기준선·점수, F2·F3 상태 머신, F1 구간 판정·문장 | JVM, 가짜 `Clock`, 녹화 시퀀스 |
 | 통합 확인 | D0 리스너, HVAC 제어, TTS·STT | Pleos Connect 에뮬레이터 + Virtual Console |
-| 시연 F2 | `f2_aggressive` (약 13분: 거친 운전 약 3분 → 차분한 주행 10분) | 제출 빌드(release·debug) `--es scenario f2_aggressive` → `FakeVehicleDataSource` CSV 재생 |
+| 시연 F2 | `f2_aggressive` (약 13분: 거친 운전 약 3분 → 차분한 주행 10분) | 제출 APK(release) `--es scenario f2_aggressive` → `FakeVehicleDataSource` CSV 재생 |
 | 시연 F1·F3 | `f3_highway` (P 브리핑 → 고속도로 100km/h 56분 단조 주행 → 휴게소 P, 약 63분) | `--es scenario f3_highway`. 짝 파일 `f3_highway.route.csv`가 있으면 `ScenarioRouteSource`가 내비 경로 대신 분기·정체·휴게소를 주행 거리에 맞춰 준다 (경로 서버 없이 F1·F3 확인). 시나리오 모양은 `F3ScenarioTest`로 고정 |
 
 ## 11. 에뮬레이터 확인 결과 (2026-11-05, Pleos_Connect_v2.0)

@@ -27,7 +27,7 @@ class F2ScenarioTest {
 
     @Test
     fun `f2_aggressive scenario restores and locks before parking`() {
-        val frames = ScenarioParser.parse(File("src/debug/assets/scenarios/f2_aggressive.csv").readText())
+        val frames = ScenarioParser.parse(File("src/main/assets/scenarios/f2_aggressive.csv").readText())
         val engine = PatternEngine(Baseline.DEFAULT, StateScorer(hourOfDay = { 14 }))
         val policy = CooldownPolicy()
         policy.startTrip(ComfortLearner.plan(ComfortProfile.DEFAULT, SeasonBand.SUMMER), HvacLimits(16f, 30f, 8, true, 3))

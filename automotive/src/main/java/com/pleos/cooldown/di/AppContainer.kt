@@ -97,7 +97,7 @@ class AppContainer(context: Context) {
     /** 실제 내비 경로 */
     val pleosRouteSource: PleosRouteSource by lazy { PleosRouteSource(appContext) }
 
-    /** 디버그 시연에서 시나리오와 같이 재생하는 경로. 없으면 null */
+    /** 시연 시나리오와 같이 재생하는 경로. 없으면 null */
     private var scenarioRouteSource: RouteSource? = null
 
     /** F1·F3가 함께 쓰는 경로 */

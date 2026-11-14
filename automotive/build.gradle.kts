@@ -40,33 +40,15 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // 공모전 제출본: 에뮬레이터에서 검증한 코드를 그대로 담도록 코드 축소(R8)는 하지 않는다
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
             signingConfig = signingConfigs.findByName("release")
-            // 실차(arm64-v8a)와 PC 에뮬레이터(x86_64)용 네이티브 라이브러리만 남긴다
-            ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
-        }
-        // 심사 제출용: debug와 같은 시연 기능(시나리오 재생)을 두고 R8 코드·리소스 축소만 더한다
-        create("demo") {
-            initWith(getByName("debug"))
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-            matchingFallbacks += listOf("debug")
-            // 실차(arm64-v8a)와 PC 에뮬레이터(x86_64)용 네이티브 라이브러리만 남긴다
-            ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         }
     }
-    // demo·release 빌드도 시연 시나리오(src/debug/assets)를 담는다
-    sourceSets.getByName("demo").assets.srcDir("src/debug/assets")
-    sourceSets.getByName("release").assets.srcDir("src/debug/assets")
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -84,7 +66,7 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
         // 시나리오 테스트가 CSV를 직접 읽으므로, CSV가 바뀌면 테스트를 다시 돌린다
-        unitTests.all { it.inputs.dir("src/debug/assets/scenarios") }
+        unitTests.all { it.inputs.dir("src/main/assets/scenarios") }
     }
 }
 
@@ -124,22 +106,6 @@ dependencies {
     testImplementation(libs.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-}
-
-// 공모전 제출용 APK를 저장소 루트 submission/CoolDownCopilot.apk로 복사한다 (*.apk는 gitignore)
-tasks.register<Copy>("exportSubmissionApk") {
-    dependsOn("assembleDebug")
-    from(layout.buildDirectory.dir("outputs/apk/debug")) { include("*-debug.apk") }
-    rename { "CoolDownCopilot.apk" }
-    into(rootProject.layout.projectDirectory.dir("submission"))
-}
-
-// 같은 시연 기능에 R8 축소를 더한 demo 빌드를 submission/CoolDownCopilot_r8.apk로 복사한다
-tasks.register<Copy>("exportSubmissionDemoApk") {
-    dependsOn("assembleDemo")
-    from(layout.buildDirectory.dir("outputs/apk/demo")) { include("*-demo.apk") }
-    rename { "CoolDownCopilot_r8.apk" }
-    into(rootProject.layout.projectDirectory.dir("submission"))
 }
 
 // 공모전 GitHub 제출 규칙: release APK를 저장소 apk/ 폴더에 팀명_앱이름_release.apk로 둔다

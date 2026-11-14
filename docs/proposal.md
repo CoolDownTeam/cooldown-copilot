@@ -169,7 +169,7 @@
 
 - **GitHub 저장소:** https://github.com/CoolDownTeam/cooldown-copilot
 - **시연 영상(각 약 4분):** CoolDownCopilot_demo.mp4(자막판), CoolDownCopilot_demo_commands.mp4(실제로 보낸 명령·앱 로그를 함께 표시) — Pleos Connect 에뮬레이터에서 녹화한 차량 신호를 재생해 기능별로 녹화. F2 쿨다운(1단계·2단계·복원, Gleo "추워" 즉시 복원), F1 코스 브리핑·어려운 구간 직전 안내, F3 환기·졸음 케어·휴게소 제안(Gleo "응")·휴식 요령, 도착 리포트, 설정. 음성 안내는 자막으로 표시
-- **APK:** 저장소 apk/CoolDownTeam_CooldownCopilot_release.apk (release 빌드, R8 축소·release 키 서명. 에뮬레이터에서 --es scenario f2_aggressive 또는 f3_highway 옵션으로 시연을 재생할 수 있음. 설치·실행 방법은 저장소 README의 "심사용 안내"). 같은 APK와 debug APK, 시연 영상 2개, 화면 시안: https://github.com/CoolDownTeam/cooldown-copilot/releases/tag/v1.1
+- **APK:** 저장소 apk/CoolDownTeam_CooldownCopilot_release.apk (release 빌드, release 키 서명. 에뮬레이터에서 --es scenario f2_aggressive 또는 f3_highway 옵션으로 시연을 재생할 수 있음. 설치·실행 방법은 저장소 README의 "심사 안내"). 같은 APK와 시연 영상 2편, 화면 시안: https://github.com/CoolDownTeam/cooldown-copilot/releases/tag/v1.1
 - **화면 시안:** CoolDownCopilot_screens.png — 에뮬레이터 화면 캡처 (온보딩·홈·주행 중 2종·주행 리포트·설정)
 - **근거 논문 목록:** 저장소 docs/research.md
 

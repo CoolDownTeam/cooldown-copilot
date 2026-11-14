@@ -156,7 +156,7 @@ class PleosRouteSource(context: Context) : RouteSource {
         }
     }
 
-    /** 디버그 시연용: 목적지로 경로를 요청하고 모의 주행을 시작한다 */
+    /** 시연용: 목적지로 경로를 요청하고 모의 주행을 시작한다 */
     fun requestDemoRoute(latitude: Double, longitude: Double, name: String) {
         val n = navi ?: return
         try {

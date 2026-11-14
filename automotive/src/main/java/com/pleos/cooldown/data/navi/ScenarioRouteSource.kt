@@ -90,7 +90,7 @@ object ScenarioRouteParser {
 }
 
 /**
- * 디버그 시연용 경로 소스. 재생 중인 차속으로 달린 거리를 쌓아서 남은 거리를 줄여 간다.
+ * 시연용 경로 소스. 재생 중인 차속으로 달린 거리를 쌓아서 남은 거리를 줄여 간다.
  */
 class ScenarioRouteSource(
     private val plan: ScenarioRoute,

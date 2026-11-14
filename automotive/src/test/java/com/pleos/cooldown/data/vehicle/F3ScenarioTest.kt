@@ -31,8 +31,8 @@ import java.io.File
  */
 class F3ScenarioTest {
 
-    private val frames = ScenarioParser.parse(File("src/debug/assets/scenarios/f3_highway.csv").readText())
-    private val route = ScenarioRouteParser.parse(File("src/debug/assets/scenarios/f3_highway.route.csv").readText())
+    private val frames = ScenarioParser.parse(File("src/main/assets/scenarios/f3_highway.csv").readText())
+    private val route = ScenarioRouteParser.parse(File("src/main/assets/scenarios/f3_highway.route.csv").readText())
 
     @Test
     fun `route briefing names the branches and the congestion`() {

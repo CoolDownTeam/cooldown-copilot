@@ -9,8 +9,8 @@ Pleos Connect(AAOS 기반) 차량용 앱으로, 현대자동차그룹 차량용 
 ### 제출 APK
 | 파일 | 설명 |
 |---|---|
-| [`apk/CoolDownTeam_CooldownCopilot_release.apk`](apk/CoolDownTeam_CooldownCopilot_release.apk) | **제출본.** release 빌드 (R8 축소, release 키 서명, 버전 1.1) |
-| [Release v1.1](https://github.com/CoolDownTeam/cooldown-copilot/releases/tag/v1.1) | 제출본과 같은 APK, debug APK, 시연 영상 2편, 화면 시안 |
+| [`apk/CoolDownTeam_CooldownCopilot_release.apk`](apk/CoolDownTeam_CooldownCopilot_release.apk) | **제출본.** release 빌드 (release 키 서명, 버전 1.1) |
+| [Release v1.1](https://github.com/CoolDownTeam/cooldown-copilot/releases/tag/v1.1) | 제출본과 같은 APK, 시연 영상 2편, 화면 시안 |
 
 ### 시연 영상 (각 약 4분)
 - [자막판](https://github.com/CoolDownTeam/cooldown-copilot/releases/download/v1.1/CoolDownCopilot_demo.mp4): 쿨다운 캐빈, 코스 브리핑, 피로 케어, 주행 리포트, 설정을 기능별로 소개합니다.
@@ -181,11 +181,11 @@ Android Studio에 Pleos Connect Emulator(AVD)를 설치한 뒤 이 저장소를 
 ./gradlew :automotive:lintDebug -q
 ```
 
-release 서명 키는 저장소에 포함하지 않았습니다. 소스 코드로 직접 빌드해 설치할 때는 debug 빌드(`assembleDebug`)를 사용해 주세요. 서명된 release APK는 [`apk/`](apk/) 폴더에 있습니다.
+release 서명 키는 저장소에 포함하지 않았습니다. 서명된 release APK는 [`apk/`](apk/) 폴더에 있으니, 설치할 때는 이 파일을 사용해 주세요. 소스 코드로 직접 빌드해 설치하려면 Android Studio의 기본 개발용 빌드(`assembleDebug`)를 사용하면 됩니다.
 
 ### 시연 시나리오 재생
 
-미리 녹화한 차량 신호를 재생합니다(release·debug 빌드 모두 지원). 앱은 운전자 프로필(사용자 10)에서 실행되며, 재생 전에 첫 실행 동의를 완료해야 합니다.
+미리 녹화한 차량 신호를 재생합니다. 앱은 운전자 프로필(사용자 10)에서 실행되며, 재생 전에 첫 실행 동의를 완료해야 합니다.
 
 ```bash
 adb shell am start --user 10 -S -n com.pleos.cooldown/.presentation.MainActivity --es scenario f2_aggressive
